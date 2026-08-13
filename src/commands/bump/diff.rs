@@ -66,6 +66,8 @@
 //! - Identify change regions (hunks)
 //! - Reconstruct file content with selected changes only
 
+use std::collections::HashSet;
+
 use anyhow::{
     Context,
     Result,
@@ -367,7 +369,6 @@ fn find_package_block(content: &str, crate_name: &str) -> Option<(usize, usize)>
     let target_name = format!(r#"name = "{crate_name}""#);
     let mut cursor = 0usize;
     let mut current_block_start: Option<usize> = None;
-    let mut found_block_start: Option<usize> = None;
 
     for line in content.split_inclusive('\n') {
         let line_start = cursor;
@@ -375,23 +376,39 @@ fn find_package_block(content: &str, crate_name: &str) -> Option<(usize, usize)>
         let trimmed = line.trim_end();
 
         if trimmed == "[[package]]" {
-            if found_block_start.is_some() {
-                // The next package starts here; close ours.
-                return Some((found_block_start?, line_start));
+            if let Some(block_start) = current_block_start
+                && is_local_package_block(&content[block_start..line_start], &target_name)
+            {
+                return Some((block_start, line_start));
             }
             current_block_start = Some(line_start);
         } else if trimmed.starts_with('[') && trimmed != "[[package]]" {
-            // Different top-level section (e.g. `[metadata]`); close ours.
-            if found_block_start.is_some() {
-                return Some((found_block_start?, line_start));
+            if let Some(block_start) = current_block_start
+                && is_local_package_block(&content[block_start..line_start], &target_name)
+            {
+                return Some((block_start, line_start));
             }
             current_block_start = None;
-        } else if trimmed == target_name && found_block_start.is_none() {
-            found_block_start = current_block_start;
         }
     }
 
-    found_block_start.map(|start| (start, cursor))
+    current_block_start.and_then(|block_start| {
+        is_local_package_block(&content[block_start..cursor], &target_name)
+            .then_some((block_start, cursor))
+    })
+}
+
+fn is_local_package_block(block: &str, target_name: &str) -> bool {
+    let mut has_target_name = false;
+    let mut has_source = false;
+
+    for line in block.lines() {
+        let trimmed = line.trim();
+        has_target_name |= trimmed == target_name;
+        has_source |= trimmed.starts_with("source = ");
+    }
+
+    has_target_name && !has_source
 }
 
 /// Splice our crate's `[[package]]` block from `working_content` into
@@ -431,6 +448,57 @@ pub fn apply_cargo_lock_version_hunks(
         // leave HEAD as-is. The caller will detect this via
         // has_non_cargo_lock_version_changes returning false.
         None => Ok(head_content.to_string()),
+    }
+}
+
+/// Splice every local workspace member block from the working lockfile into
+/// the lockfile recorded in `HEAD`.
+///
+/// Registry and Git dependency blocks remain byte-for-byte identical to
+/// `HEAD`, even when `cargo update --workspace` refreshed them while resolving
+/// the bumped workspace.
+pub fn apply_workspace_cargo_lock_version_hunks(
+    head_content: &str,
+    working_content: &str,
+    workspace_package_names: &HashSet<String>,
+    old_version: &str,
+    new_version: &str,
+) -> Result<String> {
+    let mut staged = head_content.to_string();
+
+    for package_name in workspace_package_names {
+        if find_package_block(&staged, package_name).is_none() {
+            continue;
+        }
+        staged = apply_cargo_lock_version_hunks(
+            &staged,
+            working_content,
+            package_name,
+            old_version,
+            new_version,
+        )?;
+    }
+
+    Ok(staged)
+}
+
+/// Check whether a lockfile differs outside local workspace package blocks.
+pub fn has_non_workspace_cargo_lock_version_changes(
+    head_content: &str,
+    working_content: &str,
+    workspace_package_names: &HashSet<String>,
+    old_version: &str,
+    new_version: &str,
+) -> bool {
+    match apply_workspace_cargo_lock_version_hunks(
+        head_content,
+        working_content,
+        workspace_package_names,
+        old_version,
+        new_version,
+    ) {
+        Ok(staged) => staged != working_content,
+        Err(_) => true,
     }
 }
 
@@ -627,6 +695,51 @@ version = "1.0.0"
 
         assert!(staged.contains(r#"version = "0.2.0""#));
         assert!(!staged.contains(r#"version = "0.1.0""#));
+    }
+
+    #[test]
+    fn test_apply_cargo_lock_version_hunks_for_all_workspace_members() {
+        let head = r#"[[package]]
+name = "workspace-root"
+version = "0.20.1"
+
+[[package]]
+name = "workspace-member"
+version = "0.20.1"
+
+[[package]]
+name = "registry-dependency"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+"#;
+        let working = r#"[[package]]
+name = "workspace-root"
+version = "0.20.2"
+
+[[package]]
+name = "workspace-member"
+version = "0.20.2"
+
+[[package]]
+name = "registry-dependency"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+"#;
+        let workspace_packages =
+            HashSet::from(["workspace-root".to_string(), "workspace-member".to_string()]);
+
+        let staged = apply_workspace_cargo_lock_version_hunks(
+            head,
+            working,
+            &workspace_packages,
+            "0.20.1",
+            "0.20.2",
+        )
+        .unwrap();
+
+        assert_eq!(staged.matches(r#"version = "0.20.2""#).count(), 2);
+        assert!(staged.contains("name = \"registry-dependency\"\nversion = \"1.0.0\""));
+        assert!(!staged.contains("name = \"registry-dependency\"\nversion = \"2.0.0\""));
     }
 
     #[test]

@@ -1471,6 +1471,119 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
     );
 }
 
+#[test]
+#[serial_test::serial]
+fn test_cargo_lock_selective_staging_covers_workspace_members() {
+    let dir = tempfile::tempdir().unwrap();
+    let manifest_path = dir.path().join("Cargo.toml");
+    let member_dir = dir.path().join("member");
+    let cargo_lock_path = dir.path().join("Cargo.lock");
+    std::fs::create_dir_all(member_dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/lib.rs"), "// workspace root\n").unwrap();
+    std::fs::write(member_dir.join("src/lib.rs"), "// workspace member\n").unwrap();
+
+    let initial_manifest = r#"[package]
+name = "workspace-root"
+version = "0.20.1"
+edition = "2024"
+
+[workspace]
+members = ["member"]
+resolver = "2"
+
+[workspace.package]
+version = "0.20.1"
+edition = "2024"
+"#;
+    std::fs::write(&manifest_path, initial_manifest).unwrap();
+    std::fs::write(
+        member_dir.join("Cargo.toml"),
+        r#"[package]
+name = "workspace-member"
+version.workspace = true
+edition.workspace = true
+"#,
+    )
+    .unwrap();
+
+    let initial_lock = r#"version = 4
+
+[[package]]
+name = "registry-dependency"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "workspace-member"
+version = "0.20.1"
+
+[[package]]
+name = "workspace-root"
+version = "0.20.1"
+"#;
+    std::fs::write(&cargo_lock_path, initial_lock).unwrap();
+
+    init_test_git_repo(dir.path());
+    std::process::Command::new("git")
+        .args([
+            "add",
+            "Cargo.lock",
+            "member/Cargo.toml",
+            "member/src/lib.rs",
+            "src/lib.rs",
+        ])
+        .current_dir(dir.path())
+        .status()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["commit", "-m", "test: add workspace"])
+        .current_dir(dir.path())
+        .status()
+        .unwrap();
+
+    std::fs::write(&manifest_path, initial_manifest.replace("0.20.1", "0.20.2")).unwrap();
+    let bumped_lock = initial_lock
+        .replace(
+            "registry-dependency\"\nversion = \"1.0.0",
+            "registry-dependency\"\nversion = \"2.0.0",
+        )
+        .replace("0.20.1", "0.20.2");
+    std::fs::write(&cargo_lock_path, &bumped_lock).unwrap();
+
+    use super::commit::{
+        AdditionalFile,
+        FileType,
+        commit_version_changes_with_files,
+    };
+    commit_version_changes_with_files(
+        &manifest_path,
+        "workspace-root",
+        "0.20.1",
+        "0.20.2",
+        &[AdditionalFile {
+            path: cargo_lock_path.clone(),
+            working_content: bumped_lock,
+            head_content: Some(initial_lock.to_string()),
+            file_type: FileType::CargoLock,
+        }],
+    )
+    .unwrap();
+
+    let committed_lock = std::process::Command::new("git")
+        .args(["show", "HEAD:Cargo.lock"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let committed_lock = String::from_utf8(committed_lock.stdout).unwrap();
+    assert!(committed_lock.contains("name = \"workspace-root\"\nversion = \"0.20.2\""));
+    assert!(committed_lock.contains("name = \"workspace-member\"\nversion = \"0.20.2\""));
+    assert!(committed_lock.contains("name = \"registry-dependency\"\nversion = \"1.0.0\""));
+
+    let working_lock = std::fs::read_to_string(cargo_lock_path).unwrap();
+    assert!(working_lock.contains("name = \"registry-dependency\"\nversion = \"2.0.0\""));
+}
+
 /// Test that all files (Cargo.toml, README.md, Cargo.lock) use selective
 /// staging when they have non-version changes.
 #[test]

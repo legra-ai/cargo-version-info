@@ -97,6 +97,7 @@
 //! The git command `git add -p` (interactive patch mode) does this, but
 //! implementing it programmatically is non-trivial.
 
+use std::collections::HashSet;
 use std::path::{
     Path,
     PathBuf,
@@ -273,6 +274,8 @@ pub fn commit_version_changes_with_files(
     new_version: &str,
     additional_files: &[AdditionalFile],
 ) -> Result<()> {
+    let workspace_package_names = workspace_package_names(manifest_path)?;
+
     // Discover git repository by walking up from the manifest's directory
     let repo = gix::discover(manifest_path.parent().unwrap_or_else(|| Path::new(".")))
         .context("Not in a git repository")?;
@@ -372,20 +375,20 @@ pub fn commit_version_changes_with_files(
             }
             (Some(head_content), FileType::CargoLock) => {
                 // Check if there are non-version changes
-                if diff::has_non_cargo_lock_version_changes(
+                if diff::has_non_workspace_cargo_lock_version_changes(
                     head_content,
                     &file.working_content,
-                    crate_name,
+                    &workspace_package_names,
                     old_version,
                     new_version,
                 ) {
                     eprintln!(
-                        "⚠️  Using hunk-level staging for Cargo.lock: only our crate's version will be committed."
+                        "⚠️  Using hunk-level staging for Cargo.lock: only workspace package versions will be committed."
                     );
-                    diff::apply_cargo_lock_version_hunks(
+                    diff::apply_workspace_cargo_lock_version_hunks(
                         head_content,
                         &file.working_content,
-                        crate_name,
+                        &workspace_package_names,
                         old_version,
                         new_version,
                     )?
@@ -419,6 +422,22 @@ pub fn commit_version_changes_with_files(
     reset_index_to_head(&repo)?;
 
     Ok(())
+}
+
+fn workspace_package_names(manifest_path: &Path) -> Result<HashSet<String>> {
+    let mut command = cargo_metadata::MetadataCommand::new();
+    command.manifest_path(manifest_path).no_deps();
+    let metadata = command
+        .exec()
+        .context("Failed to read workspace metadata for lockfile staging")?;
+    let workspace_members: HashSet<_> = metadata.workspace_members.iter().collect();
+
+    Ok(metadata
+        .packages
+        .into_iter()
+        .filter(|package| workspace_members.contains(&package.id))
+        .map(|package| package.name.to_string())
+        .collect())
 }
 
 /// Get the content of a file from the HEAD tree.
