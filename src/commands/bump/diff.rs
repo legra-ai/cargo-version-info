@@ -356,7 +356,7 @@ pub fn has_non_readme_version_changes(
     false
 }
 
-/// Locate our crate's `[[package]]` block in a Cargo.lock by structure.
+/// Locate a local crate's `[[package]]` block in a Cargo.lock by structure.
 ///
 /// Returns the byte range `[start, end)` covering the block from its
 /// `[[package]]` header up to (but not including) the next top-level
@@ -364,7 +364,7 @@ pub fn has_non_readme_version_changes(
 /// between blocks is included in the range so that splicing two blocks
 /// preserves Cargo.lock formatting.
 ///
-/// Returns `None` if no `[[package]]` block names our crate.
+/// Returns `None` if no local `[[package]]` block names the crate.
 fn find_package_block(content: &str, crate_name: &str) -> Option<(usize, usize)> {
     let target_name = format!(r#"name = "{crate_name}""#);
     let mut cursor = 0usize;
@@ -411,10 +411,10 @@ fn is_local_package_block(block: &str, target_name: &str) -> bool {
     has_target_name && !has_source
 }
 
-/// Splice our crate's `[[package]]` block from `working_content` into
+/// Splice one local crate's `[[package]]` block from `working_content` into
 /// `head_content`, leaving every other byte of `head_content` untouched.
 ///
-/// This is the structural equivalent of "stage only our crate's lockfile
+/// This is the structural equivalent of "stage only this crate's lockfile
 /// entry": dependency changes elsewhere stay unstaged. It is robust to
 /// HEAD's recorded version drifting away from `old_version` (e.g. when
 /// Cargo.lock was previously committed at a stale version), which the

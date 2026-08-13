@@ -185,7 +185,7 @@ uncommitted work untouched. This applies to all version-related files:
 | File        | What gets committed                             |
 | ----------- | ----------------------------------------------- |
 | Cargo.toml  | Only lines containing version changes           |
-| Cargo.lock  | Only our crate's package entry (not dep updates)|
+| Cargo.lock  | All local workspace package entries (not dependency updates) |
 | README.md   | Only `crate-name = "version"` lines             |
 
 ```bash

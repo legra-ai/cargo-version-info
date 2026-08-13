@@ -115,7 +115,7 @@ use super::diff;
 /// Type of additional file for selective staging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
-    /// Cargo.lock file - filter to only our crate's version changes
+    /// Cargo.lock file - filter to local workspace package changes
     CargoLock,
     /// README.md file - filter to only version reference changes
     Readme,
@@ -261,7 +261,7 @@ pub fn commit_version_changes(
 /// For all files, only version-related changes are committed:
 ///
 /// - **Cargo.toml**: Only lines containing "version" or the version strings
-/// - **Cargo.lock**: Only our crate's package entry changes
+/// - **Cargo.lock**: All local workspace package entries change
 /// - **README.md**: Only lines with `crate-name = "version"` patterns
 /// - **Other files**: Full content (no filtering)
 ///
