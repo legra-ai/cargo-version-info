@@ -1,7 +1,7 @@
 [package]
 name = "cargo-version-info"
 description = "Cargo subcommand for unified version management across CI/CD, Rust code, and shell scripts"
-version = "0.0.17"
+version = "0.0.18"
 edition = "2024"
 license-file = "LICENSE"
 keywords = ["cargo", "version", "semver", "cli", "ci"]
