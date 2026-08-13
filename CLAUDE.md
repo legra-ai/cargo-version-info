@@ -200,7 +200,7 @@ Version is computed dynamically via `build.rs`:
 
 ### Git hooks (Rhusky)
 
-Git hooks in `.githooks/` are auto-installed via [Rhusky](https://github.com/dataroadinc/rhusky)
+Git hooks in `.githooks/` are auto-installed via [Rhusky](https://github.com/legra-ai/rhusky)
 during `cargo build`. Rhusky sets Git's `core.hooksPath` to point
 to `.githooks/`. Installation is skipped in CI environments.
 

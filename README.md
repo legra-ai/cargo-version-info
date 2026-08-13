@@ -89,7 +89,7 @@ Get the latest published GitHub release version.
 cargo version-info latest
 
 # Specify repository
-cargo version-info latest --owner dataroadinc --repo my-project
+cargo version-info latest --owner legra-ai --repo my-project
 
 # Output as tag format
 cargo version-info latest --format tag
@@ -336,7 +336,7 @@ let version = String::from_utf8(output.stdout)?;
 This tool is designed to replace:
 
 1. **GitHub Actions**: See
-   [dataroadinc/github-actions](https://github.com/dataroadinc/github-actions)
+   [legra-ai/github-actions](https://github.com/legra-ai/github-actions)
    for `calculate-next-version` and `get-version` actions
 2. **Bash scripts**: Version extraction in `.bash/*.sh` files
 3. **Rust build scripts**: Version resolution in
