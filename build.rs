@@ -21,12 +21,12 @@ use std::{
 use rhusky::Rhusky;
 
 fn main() {
-    // Install git hooks via Rhusky (skipped in CI)
-    let _ = Rhusky::new()
+    Rhusky::new()
         .hooks_dir(".githooks")
         .skip_in_env("GITHUB_ACTIONS")
         .with_default_hooks()
-        .install();
+        .install_from_build_script()
+        .expect("failed to install repository Git hooks");
 
     let version = compute_version_string(".").unwrap_or_else(|e| {
         eprintln!(

@@ -11,7 +11,7 @@ authors = ["Jacobus Geluk <jacobus@dataroad.com>"]
 repository = "https://github.com/legra-ai/cargo-version-info"
 documentation = "https://docs.rs/cargo-version-info"
 homepage = "https://github.com/legra-ai/cargo-version-info"
-rust-version = "1.93.0"
+rust-version = "1.94.1"
 publish = true
 
 exclude = [
@@ -41,7 +41,7 @@ clap = { version = "4.6.6", default-features = false, features = [
     "env",
     "std",
 ] }
-dotenvage = "0.4.1"
+dotenvage = "0.7.3"
 gix = { version = "0.86.0", default-features = false, features = [
     "revision",
     "worktree-mutation",
@@ -81,7 +81,7 @@ toml_edit = "0.25.13"
 carlog = "0.1"
 console = "0.16.4"
 indicatif = "0.18.6"
-cargo-plugin-utils = "0.0.10"
+cargo-plugin-utils = "0.0.12"
 portable-pty = "0.9.0"
 smallvec = "1.15.2"
 tempfile = "3.27.0"
@@ -101,7 +101,7 @@ gix = { version = "0.86.0", default-features = false, features = [
     "sha1",
 ] }
 toml = "1.1"
-rhusky = "0.0.2"
+rhusky = "0.0.6"
 
 [dev-dependencies]
 tempfile = "3.27"
