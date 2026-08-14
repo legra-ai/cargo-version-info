@@ -2,8 +2,8 @@
 
 [![Crates.io](https://img.shields.io/crates/v/cargo-version-info.svg)](https://crates.io/crates/cargo-version-info)
 [![Documentation](https://docs.rs/cargo-version-info/badge.svg)](https://docs.rs/cargo-version-info)
-[![CI](https://github.com/agnos-ai/cargo-version-info/workflows/CI%2FCD/badge.svg)](https://github.com/agnos-ai/cargo-version-info/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/agnos-ai/cargo-version-info/blob/main/LICENSE)
+[![CI](https://github.com/legra-ai/cargo-version-info/actions/workflows/ci.yml/badge.svg)](https://github.com/legra-ai/cargo-version-info/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Downloads](https://img.shields.io/crates/d/cargo-version-info.svg)](https://crates.io/crates/cargo-version-info)
 
 A Cargo subcommand for unified version management across CI/CD, Rust
@@ -344,4 +344,7 @@ This tool is designed to replace:
 
 ## License
 
-Same as the workspace (see root LICENSE file).
+Copyright © 2026 DataRoad Inc, Delaware, USA, trading as Legra.
+
+Licensed under either the [MIT license](LICENSE-MIT) or the
+[Apache License, Version 2.0](LICENSE-APACHE), at your option.
