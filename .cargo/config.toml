@@ -2,5 +2,6 @@
 rustflags = ["-Dwarnings", "-Wmissing-docs"]
 
 [env]
+RHUSKY_REPOSITORY_ROOT = { value = ".", relative = true, force = true }
 # Run tests single-threaded to avoid git index conflicts
 RUST_TEST_THREADS = "1"
