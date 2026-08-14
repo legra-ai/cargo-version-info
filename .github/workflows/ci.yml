@@ -16,4 +16,5 @@ jobs:
     with:
       crate-name: cargo-version-info
       kind: binary
+      force-release: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
