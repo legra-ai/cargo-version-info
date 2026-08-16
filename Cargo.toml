@@ -105,7 +105,7 @@ rhusky = "0.0.6"
 
 [dev-dependencies]
 tempfile = "3.27"
-serial_test = "3"
+serial_test = "4"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
