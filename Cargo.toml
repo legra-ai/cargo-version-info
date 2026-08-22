@@ -33,6 +33,7 @@ name = "cargo-version-info"
 path = "src/main.rs"
 
 [dependencies]
+async-fs-io = "0.1.5"
 anyhow = "1.0.104"
 bstr = "1.13.1"
 cargo_metadata = "0.23.1"
@@ -92,6 +93,7 @@ ssh-key = { version = "0.6", features = ["ed25519", "p256", "p384", "rsa"] }
 ssh-agent-client-rs = "1.1"
 
 [build-dependencies]
+async-fs-io = "0.1.5"
 anyhow = "1.0.104"
 gix = { version = "0.86.0", default-features = false, features = [
     "revision",
@@ -102,6 +104,7 @@ gix = { version = "0.86.0", default-features = false, features = [
 ] }
 toml = "1.1"
 rhusky = "0.0.6"
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [dev-dependencies]
 tempfile = "3.27"

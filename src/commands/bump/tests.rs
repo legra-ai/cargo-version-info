@@ -4,7 +4,6 @@
 //! command including version calculation, TOML updates, and git integration.
 
 use bstr::ByteSlice;
-use tempfile::TempDir;
 
 use super::*;
 
@@ -14,15 +13,21 @@ use super::*;
 /// - Cargo.toml with the specified content
 /// - src/ directory
 /// - src/lib.rs with minimal content (required by cargo_metadata)
-fn create_temp_cargo_project(content: &str) -> TempDir {
-    let dir = tempfile::tempdir().unwrap();
+async fn create_temp_cargo_project(content: &str) -> async_fs_io::TempDir {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
-    std::fs::write(&manifest_path, content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory with a minimal lib.rs for cargo metadata to work
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), b"// Test library\n")
+        .await
+        .unwrap();
 
     dir
 }
@@ -66,16 +71,17 @@ fn init_test_git_repo(dir: &std::path::Path) {
         .unwrap();
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_bump_patch_version() {
+async fn test_bump_patch_version() {
     let dir = create_temp_cargo_project(
         r#"
 [package]
 name = "test"
 version = "0.1.2"
 "#,
-    );
+    )
+    .await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     init_test_git_repo(dir.path());
@@ -95,24 +101,27 @@ version = "0.1.2"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok());
 
     // Verify version was updated
-    let content = std::fs::read_to_string(&manifest_path).unwrap();
+    let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(content.contains("version = \"0.1.3\""));
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_bump_minor_version() {
+async fn test_bump_minor_version() {
     let dir = create_temp_cargo_project(
         r#"
 [package]
 name = "test"
 version = "0.1.2"
 "#,
-    );
+    )
+    .await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     let args = BumpArgs {
@@ -130,23 +139,26 @@ version = "0.1.2"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok());
 
-    let content = std::fs::read_to_string(&manifest_path).unwrap();
+    let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(content.contains("version = \"0.2.0\""));
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_bump_major_version() {
+async fn test_bump_major_version() {
     let dir = create_temp_cargo_project(
         r#"
 [package]
 name = "test"
 version = "0.1.2"
 "#,
-    );
+    )
+    .await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     let args = BumpArgs {
@@ -164,23 +176,26 @@ version = "0.1.2"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok());
 
-    let content = std::fs::read_to_string(&manifest_path).unwrap();
+    let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(content.contains("version = \"1.0.0\""));
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_bump_manual_version() {
+async fn test_bump_manual_version() {
     let dir = create_temp_cargo_project(
         r#"
 [package]
 name = "test"
 version = "0.1.2"
 "#,
-    );
+    )
+    .await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     let args = BumpArgs {
@@ -198,23 +213,26 @@ version = "0.1.2"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok());
 
-    let content = std::fs::read_to_string(&manifest_path).unwrap();
+    let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(content.contains("version = \"2.5.10\""));
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_bump_same_version_error() {
+async fn test_bump_same_version_error() {
     let dir = create_temp_cargo_project(
         r#"
 [package]
 name = "test"
 version = "0.1.2"
 "#,
-    );
+    )
+    .await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     let args = BumpArgs {
@@ -232,7 +250,7 @@ version = "0.1.2"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_err());
     assert!(
         result
@@ -248,7 +266,10 @@ version = "0.1.2"
 /// - Initial commit containing Cargo.toml
 /// - Proper author/committer configuration
 /// - Ready for testing bump operations
-fn create_test_git_repo_with_gix(dir: &std::path::Path, initial_content: &str) -> gix::Repository {
+async fn create_test_git_repo_with_gix(
+    dir: &std::path::Path,
+    initial_content: &str,
+) -> gix::Repository {
     use gix::index::{
         State,
         entry,
@@ -260,12 +281,18 @@ fn create_test_git_repo_with_gix(dir: &std::path::Path, initial_content: &str) -
 
     // Create Cargo.toml
     let manifest_path = dir.join("Cargo.toml");
-    std::fs::write(&manifest_path, initial_content).expect("Failed to write Cargo.toml");
+    async_fs_io::write_bytes(&manifest_path, initial_content.as_bytes())
+        .await
+        .expect("Failed to write Cargo.toml");
 
     // Create src/lib.rs for valid cargo project
     let src_dir = dir.join("src");
-    std::fs::create_dir_all(&src_dir).expect("Failed to create src directory");
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").expect("Failed to write lib.rs");
+    async_fs_io::ensure_dir(&src_dir)
+        .await
+        .expect("Failed to create src directory");
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .expect("Failed to write lib.rs");
 
     // Create initial commit using gix
     // 1. Create empty index
@@ -432,21 +459,27 @@ fn create_test_git_repo_with_gix(dir: &std::path::Path, initial_content: &str) -
     // Set user.name and user.email in repo config for bump command
     // Also disable commit signing to avoid dependency on SSH keys in tests
     let config_path = repo.path().join("config");
-    let config_content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| String::new());
+    let config_content = async_fs_io::read_string_bounded(&config_path, 64 * 1024 * 1024)
+        .await
+        .unwrap_or_else(|_| String::new());
     let new_config = format!(
         "{}\n[user]\n\tname = Test User\n\temail = test@example.com\n[commit]\n\tgpgsign = false\n",
         config_content
     );
-    std::fs::write(&config_path, new_config).expect("Failed to write config");
+    async_fs_io::write_bytes(&config_path, new_config.as_bytes())
+        .await
+        .expect("Failed to write config");
 
     repo
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_hunk_level_staging_only_version_line() {
+async fn test_hunk_level_staging_only_version_line() {
     // Create repo with initial content
-    let dir = tempfile::tempdir().unwrap();
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let initial_content = r#"[package]
 name = "test"
 version = "0.1.0"
@@ -454,7 +487,7 @@ description = "original description"
 edition = "2021"
 "#;
 
-    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content);
+    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content).await;
 
     // Modify Cargo.toml: change version AND description
     let manifest_path = dir.path().join("Cargo.toml");
@@ -464,7 +497,9 @@ version = "0.1.0"
 description = "modified description"
 edition = "2021"
 "#;
-    std::fs::write(&manifest_path, modified_content).expect("Failed to modify Cargo.toml");
+    async_fs_io::write_bytes(&manifest_path, modified_content.as_bytes())
+        .await
+        .expect("Failed to modify Cargo.toml");
 
     // Run bump command
     let args = BumpArgs {
@@ -482,7 +517,7 @@ edition = "2021"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit using gix
@@ -527,18 +562,22 @@ edition = "2021"
     );
 
     // Verify working directory still has the description change
-    let working_content = std::fs::read_to_string(&manifest_path).expect("Failed to read file");
+    let working_content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .expect("Failed to read file");
     assert!(
         working_content.contains("description = \"modified description\""),
         "Working directory should still have modified description"
     );
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_hunk_level_staging_multiple_changes() {
+async fn test_hunk_level_staging_multiple_changes() {
     // Test with multiple non-version changes
-    let dir = tempfile::tempdir().unwrap();
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let initial_content = r#"[package]
 name = "test"
 version = "1.0.0"
@@ -547,7 +586,7 @@ description = "A test crate"
 license = "MIT"
 "#;
 
-    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content);
+    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content).await;
 
     // Modify multiple fields including version
     let manifest_path = dir.path().join("Cargo.toml");
@@ -558,7 +597,9 @@ authors = ["New Author"]
 description = "An updated test crate"
 license = "Apache-2.0"
 "#;
-    std::fs::write(&manifest_path, modified_content).expect("Failed to modify Cargo.toml");
+    async_fs_io::write_bytes(&manifest_path, modified_content.as_bytes())
+        .await
+        .expect("Failed to modify Cargo.toml");
 
     // Run bump to change version
     let args = BumpArgs {
@@ -576,7 +617,7 @@ license = "Apache-2.0"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit
@@ -622,23 +663,27 @@ license = "Apache-2.0"
     );
 
     // Verify working directory still has all the other changes
-    let working_content = std::fs::read_to_string(&manifest_path).expect("Failed to read file");
+    let working_content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .expect("Failed to read file");
     assert!(working_content.contains("authors = [\"New Author\"]"));
     assert!(working_content.contains("description = \"An updated test crate\""));
     assert!(working_content.contains("license = \"Apache-2.0\""));
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_commit_has_proper_author() {
+async fn test_commit_has_proper_author() {
     // Verify commits have proper author from git config
-    let dir = tempfile::tempdir().unwrap();
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let initial_content = r#"[package]
 name = "test"
 version = "0.5.0"
 "#;
 
-    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content);
+    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content).await;
 
     let manifest_path = dir.path().join("Cargo.toml");
 
@@ -658,7 +703,7 @@ version = "0.5.0"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit has proper author
@@ -701,22 +746,26 @@ version = "0.5.0"
 }
 
 // Skip on Windows due to gix file locking issues
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_only_version_file_in_commit_not_other_staged_files() {
+async fn test_only_version_file_in_commit_not_other_staged_files() {
     // Verify that bump doesn't include other staged files
-    let dir = tempfile::tempdir().unwrap();
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let initial_content = r#"[package]
 name = "test"
 version = "2.0.0"
 "#;
 
-    let repo = create_test_git_repo_with_gix(dir.path(), initial_content);
+    let repo = create_test_git_repo_with_gix(dir.path(), initial_content).await;
 
     // Create another file and stage it (but don't commit)
     let readme_path = dir.path().join("README.md");
-    std::fs::write(&readme_path, "# Test Project\n").expect("Failed to write README");
+    async_fs_io::write_bytes(&readme_path, "# Test Project\n".as_bytes())
+        .await
+        .expect("Failed to write README");
 
     // Stage the README using gix
     let index_path = repo.path().join("index");
@@ -728,7 +777,7 @@ version = "2.0.0"
     };
 
     // Create or load index
-    let mut index_state = if index_path.exists() {
+    let mut index_state = if async_fs_io::try_exists(&index_path).await.unwrap() {
         let file = File::at(
             &index_path,
             repo.object_hash(),
@@ -761,11 +810,13 @@ version = "2.0.0"
     index_state.sort_entries();
 
     // Write index back to disk (staging README.md)
-    let mut index_file_write =
-        std::fs::File::create(&index_path).expect("Failed to create index file");
+    let mut index_bytes = Vec::new();
     index_state
-        .write_to(&mut index_file_write, gix::index::write::Options::default())
+        .write_to(&mut index_bytes, gix::index::write::Options::default())
         .expect("Failed to write index");
+    async_fs_io::write_bytes(&index_path, &index_bytes)
+        .await
+        .expect("Failed to write index file");
 
     // Now run bump - it should NOT include README.md
     let manifest_path = dir.path().join("Cargo.toml");
@@ -784,7 +835,7 @@ version = "2.0.0"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit does NOT contain README.md
@@ -820,20 +871,22 @@ version = "2.0.0"
     // only the version file, regardless of what's in .git/index.
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_preserves_all_files_from_head() {
+async fn test_preserves_all_files_from_head() {
     // CRITICAL REGRESSION TEST:
     // Verify that bump doesn't delete other files by creating a minimal tree.
     // This is the bug that caused all files to be deleted in commit 7192f12.
 
-    let dir = tempfile::tempdir().unwrap();
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let initial_content = r#"[package]
 name = "test"
 version = "1.0.0"
 "#;
 
-    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content);
+    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content).await;
 
     // The initial commit has:
     // - Cargo.toml
@@ -857,7 +910,7 @@ version = "1.0.0"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit using gix
@@ -924,26 +977,36 @@ version = "1.0.0"
     );
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_preserves_multiple_files_and_directories() {
+async fn test_preserves_multiple_files_and_directories() {
     // Extended regression test: verify bump preserves complex directory structures
-    let dir = tempfile::tempdir().unwrap();
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let initial_content = r#"[package]
 name = "multi-file-test"
 version = "0.5.0"
 "#;
 
-    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content);
+    let _repo = create_test_git_repo_with_gix(dir.path(), initial_content).await;
 
     // Add more files to the initial commit
     // Create additional files: README.md, .gitignore, docs/guide.md
-    std::fs::write(dir.path().join("README.md"), "# Project\n").expect("Failed to write README");
-    std::fs::write(dir.path().join(".gitignore"), "target/\n").expect("Failed to write .gitignore");
+    async_fs_io::write_bytes(dir.path().join("README.md"), "# Project\n".as_bytes())
+        .await
+        .expect("Failed to write README");
+    async_fs_io::write_bytes(dir.path().join(".gitignore"), "target/\n".as_bytes())
+        .await
+        .expect("Failed to write .gitignore");
 
     let docs_dir = dir.path().join("docs");
-    std::fs::create_dir_all(&docs_dir).expect("Failed to create docs dir");
-    std::fs::write(docs_dir.join("guide.md"), "# Guide\n").expect("Failed to write guide");
+    async_fs_io::ensure_dir(&docs_dir)
+        .await
+        .expect("Failed to create docs dir");
+    async_fs_io::write_bytes(docs_dir.join("guide.md"), "# Guide\n".as_bytes())
+        .await
+        .expect("Failed to write guide");
 
     // Build a tree with all files
     // For simplicity, we'll use git commands to add these files
@@ -976,7 +1039,7 @@ version = "0.5.0"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the bump commit
@@ -1049,9 +1112,9 @@ version = "0.5.0"
 /// regression test for a bug where the index was left with stale staged
 /// changes after bump because the commit was created via direct tree
 /// manipulation bypassing the index.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_bump_resets_index_after_commit() {
+async fn test_bump_resets_index_after_commit() {
     let cargo_content = r#"
 [package]
 name = "test-project"
@@ -1060,7 +1123,7 @@ edition = "2021"
 "#;
 
     // Create a test cargo project
-    let dir = create_temp_cargo_project(cargo_content);
+    let dir = create_temp_cargo_project(cargo_content).await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     // Initialize git repo and create initial commit
@@ -1080,7 +1143,9 @@ edition = "2021"
     // changes This is the scenario that caused the bug: someone had staged
     // changes, then ran bump, and the index was left in a confused state
     let readme_path = dir.path().join("README.md");
-    std::fs::write(&readme_path, "# Test\n").unwrap();
+    async_fs_io::write_bytes(&readme_path, "# Test\n".as_bytes())
+        .await
+        .unwrap();
     std::process::Command::new("git")
         .args(["add", "README.md"])
         .current_dir(dir.path())
@@ -1102,7 +1167,7 @@ edition = "2021"
         no_lock: true,
         no_readme: true,
     };
-    bump(args).expect("Bump should succeed");
+    bump(args).await.expect("Bump should succeed");
 
     // Verify there are no staged changes (index matches HEAD)
     // This is the key assertion - previously the index would have stale staged
@@ -1136,10 +1201,12 @@ edition = "2021"
 /// This test verifies that when README.md has both version-related changes
 /// (e.g., `my-crate = "0.1.0"` -> `"0.2.0"`) and non-version changes (e.g.,
 /// documentation updates), only the version-related changes are committed.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_readme_selective_staging() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_readme_selective_staging() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
 
     // Create initial Cargo.toml and README.md
     let initial_cargo_toml = r#"[package]
@@ -1162,15 +1229,21 @@ This is the original description.
 "#;
 
     let manifest_path = dir.path().join("Cargo.toml");
-    std::fs::write(&manifest_path, initial_cargo_toml).unwrap();
+    async_fs_io::write_bytes(&manifest_path, initial_cargo_toml.as_bytes())
+        .await
+        .unwrap();
 
     let readme_path = dir.path().join("README.md");
-    std::fs::write(&readme_path, initial_readme).unwrap();
+    async_fs_io::write_bytes(&readme_path, initial_readme.as_bytes())
+        .await
+        .unwrap();
 
     // Create src/lib.rs for valid cargo project
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     // Initialize git repo
     init_test_git_repo(dir.path());
@@ -1202,7 +1275,9 @@ This is the UPDATED description with more details.
 
 This is a new section that was added.
 "#;
-    std::fs::write(&readme_path, modified_readme).unwrap();
+    async_fs_io::write_bytes(&readme_path, modified_readme.as_bytes())
+        .await
+        .unwrap();
 
     // Run bump - this should only commit the version change in README
     let args = BumpArgs {
@@ -1220,7 +1295,7 @@ This is a new section that was added.
         no_readme: false, // DO update README
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit
@@ -1270,7 +1345,9 @@ This is a new section that was added.
     );
 
     // Verify working directory still has ALL changes
-    let working_readme = std::fs::read_to_string(&readme_path).expect("Failed to read README");
+    let working_readme = async_fs_io::read_string_bounded(&readme_path, 64 * 1024 * 1024)
+        .await
+        .expect("Failed to read README");
     assert!(
         working_readme.contains("UPDATED description"),
         "Working README should still have the updated description"
@@ -1286,10 +1363,12 @@ This is a new section that was added.
 /// This test verifies that when Cargo.lock has both our crate's version
 /// change and other dependency updates (pre-existing uncommitted changes),
 /// only our crate's version change is committed.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_cargo_lock_selective_staging() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_cargo_lock_selective_staging() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
 
     // Create initial Cargo.toml
     let initial_cargo_toml = r#"[package]
@@ -1317,15 +1396,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "#;
 
     let manifest_path = dir.path().join("Cargo.toml");
-    std::fs::write(&manifest_path, initial_cargo_toml).unwrap();
+    async_fs_io::write_bytes(&manifest_path, initial_cargo_toml.as_bytes())
+        .await
+        .unwrap();
 
     let cargo_lock_path = dir.path().join("Cargo.lock");
-    std::fs::write(&cargo_lock_path, initial_cargo_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, initial_cargo_lock.as_bytes())
+        .await
+        .unwrap();
 
     // Create src/lib.rs for valid cargo project
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     // Initialize git repo
     init_test_git_repo(dir.path());
@@ -1355,7 +1440,9 @@ name = "other-dependency"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 "#;
-    std::fs::write(&cargo_lock_path, modified_cargo_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, modified_cargo_lock.as_bytes())
+        .await
+        .unwrap();
 
     // Run bump with --no-lock to skip cargo update (we're manually controlling
     // Cargo.lock) But we need the selective staging logic to run, so we'll use
@@ -1368,7 +1455,9 @@ edition = "2021"
 [dependencies]
 # No real dependencies - we'll simulate Cargo.lock content
 "#;
-    std::fs::write(&manifest_path, updated_cargo_toml).unwrap();
+    async_fs_io::write_bytes(&manifest_path, updated_cargo_toml.as_bytes())
+        .await
+        .unwrap();
 
     // Now update Cargo.lock to have our new version AND the dependency update
     let final_cargo_lock = r#"# This file is automatically @generated by Cargo.
@@ -1384,7 +1473,9 @@ name = "other-dependency"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 "#;
-    std::fs::write(&cargo_lock_path, final_cargo_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, final_cargo_lock.as_bytes())
+        .await
+        .unwrap();
 
     // Use commit function directly to test selective staging
     use super::commit::{
@@ -1410,6 +1501,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
         "0.2.0",
         &additional_files,
     );
+    let result = result.await;
     assert!(result.is_ok(), "Commit failed: {:?}", result.err());
 
     // Verify the commit
@@ -1463,25 +1555,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
     );
 
     // Verify working directory still has the dependency update
-    let working_lock =
-        std::fs::read_to_string(&cargo_lock_path).expect("Failed to read Cargo.lock");
+    let working_lock = async_fs_io::read_string_bounded(&cargo_lock_path, 64 * 1024 * 1024)
+        .await
+        .expect("Failed to read Cargo.lock");
     assert!(
         working_lock.contains(r#"version = "2.0.0""#),
         "Working Cargo.lock should still have the dependency update"
     );
 }
 
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_cargo_lock_selective_staging_covers_workspace_members() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_cargo_lock_selective_staging_covers_workspace_members() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
     let member_dir = dir.path().join("member");
     let cargo_lock_path = dir.path().join("Cargo.lock");
-    std::fs::create_dir_all(member_dir.join("src")).unwrap();
-    std::fs::create_dir_all(dir.path().join("src")).unwrap();
-    std::fs::write(dir.path().join("src/lib.rs"), "// workspace root\n").unwrap();
-    std::fs::write(member_dir.join("src/lib.rs"), "// workspace member\n").unwrap();
+    async_fs_io::ensure_dir(member_dir.join("src"))
+        .await
+        .unwrap();
+    async_fs_io::ensure_dir(dir.path().join("src"))
+        .await
+        .unwrap();
+    async_fs_io::write_bytes(
+        dir.path().join("src/lib.rs"),
+        "// workspace root\n".as_bytes(),
+    )
+    .await
+    .unwrap();
+    async_fs_io::write_bytes(
+        member_dir.join("src/lib.rs"),
+        "// workspace member\n".as_bytes(),
+    )
+    .await
+    .unwrap();
 
     let initial_manifest = r#"[package]
 name = "workspace-root"
@@ -1496,15 +1605,19 @@ resolver = "2"
 version = "0.20.1"
 edition = "2024"
 "#;
-    std::fs::write(&manifest_path, initial_manifest).unwrap();
-    std::fs::write(
+    async_fs_io::write_bytes(&manifest_path, initial_manifest.as_bytes())
+        .await
+        .unwrap();
+    async_fs_io::write_bytes(
         member_dir.join("Cargo.toml"),
         r#"[package]
 name = "workspace-member"
 version.workspace = true
 edition.workspace = true
-"#,
+"#
+        .as_bytes(),
     )
+    .await
     .unwrap();
 
     let initial_lock = r#"version = 4
@@ -1522,7 +1635,9 @@ version = "0.20.1"
 name = "workspace-root"
 version = "0.20.1"
 "#;
-    std::fs::write(&cargo_lock_path, initial_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, initial_lock.as_bytes())
+        .await
+        .unwrap();
 
     init_test_git_repo(dir.path());
     std::process::Command::new("git")
@@ -1542,14 +1657,21 @@ version = "0.20.1"
         .status()
         .unwrap();
 
-    std::fs::write(&manifest_path, initial_manifest.replace("0.20.1", "0.20.2")).unwrap();
+    async_fs_io::write_bytes(
+        &manifest_path,
+        initial_manifest.replace("0.20.1", "0.20.2").as_bytes(),
+    )
+    .await
+    .unwrap();
     let bumped_lock = initial_lock
         .replace(
             "registry-dependency\"\nversion = \"1.0.0",
             "registry-dependency\"\nversion = \"2.0.0",
         )
         .replace("0.20.1", "0.20.2");
-    std::fs::write(&cargo_lock_path, &bumped_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, bumped_lock.as_bytes())
+        .await
+        .unwrap();
 
     use super::commit::{
         AdditionalFile,
@@ -1568,6 +1690,7 @@ version = "0.20.1"
             file_type: FileType::CargoLock,
         }],
     )
+    .await
     .unwrap();
 
     let committed_lock = std::process::Command::new("git")
@@ -1580,16 +1703,20 @@ version = "0.20.1"
     assert!(committed_lock.contains("name = \"workspace-member\"\nversion = \"0.20.2\""));
     assert!(committed_lock.contains("name = \"registry-dependency\"\nversion = \"1.0.0\""));
 
-    let working_lock = std::fs::read_to_string(cargo_lock_path).unwrap();
+    let working_lock = async_fs_io::read_string_bounded(cargo_lock_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(working_lock.contains("name = \"registry-dependency\"\nversion = \"2.0.0\""));
 }
 
 /// Test that all files (Cargo.toml, README.md, Cargo.lock) use selective
 /// staging when they have non-version changes.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_all_files_selective_staging() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_all_files_selective_staging() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
 
     // Create initial files
     let initial_cargo_toml = r#"[package]
@@ -1621,18 +1748,26 @@ version = "1.0.0"
 "#;
 
     let manifest_path = dir.path().join("Cargo.toml");
-    std::fs::write(&manifest_path, initial_cargo_toml).unwrap();
+    async_fs_io::write_bytes(&manifest_path, initial_cargo_toml.as_bytes())
+        .await
+        .unwrap();
 
     let readme_path = dir.path().join("README.md");
-    std::fs::write(&readme_path, initial_readme).unwrap();
+    async_fs_io::write_bytes(&readme_path, initial_readme.as_bytes())
+        .await
+        .unwrap();
 
     let cargo_lock_path = dir.path().join("Cargo.lock");
-    std::fs::write(&cargo_lock_path, initial_cargo_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, initial_cargo_lock.as_bytes())
+        .await
+        .unwrap();
 
     // Create src/lib.rs
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test\n".as_bytes())
+        .await
+        .unwrap();
 
     // Initialize git repo
     init_test_git_repo(dir.path());
@@ -1654,7 +1789,9 @@ version = "1.0.0"
 description = "UPDATED description"
 edition = "2021"
 "#;
-    std::fs::write(&manifest_path, modified_cargo_toml).unwrap();
+    async_fs_io::write_bytes(&manifest_path, modified_cargo_toml.as_bytes())
+        .await
+        .unwrap();
 
     let modified_readme = r#"# Test Crate
 
@@ -1664,7 +1801,9 @@ test-crate = "1.0.0"
 
 UPDATED readme content with new docs.
 "#;
-    std::fs::write(&readme_path, modified_readme).unwrap();
+    async_fs_io::write_bytes(&readme_path, modified_readme.as_bytes())
+        .await
+        .unwrap();
 
     let modified_cargo_lock = r#"# This file is automatically @generated by Cargo.
 version = 3
@@ -1677,7 +1816,9 @@ version = "1.0.0"
 name = "dep"
 version = "2.0.0"
 "#;
-    std::fs::write(&cargo_lock_path, modified_cargo_lock).unwrap();
+    async_fs_io::write_bytes(&cargo_lock_path, modified_cargo_lock.as_bytes())
+        .await
+        .unwrap();
 
     // Run bump
     let args = BumpArgs {
@@ -1695,7 +1836,7 @@ version = "2.0.0"
         no_readme: false, // Do update README
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify the commit
@@ -1745,10 +1886,14 @@ version = "2.0.0"
     );
 
     // Verify working directory still has ALL changes
-    let working_cargo = std::fs::read_to_string(&manifest_path).unwrap();
+    let working_cargo = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(working_cargo.contains("UPDATED description"));
 
-    let working_readme = std::fs::read_to_string(&readme_path).unwrap();
+    let working_readme = async_fs_io::read_string_bounded(&readme_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(working_readme.contains("UPDATED readme content"));
 }
 
@@ -1757,11 +1902,13 @@ version = "2.0.0"
 // ============================================================================
 
 /// Test that pre_bump_hooks are executed with correct version substitution.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_pre_bump_hooks_executed() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_pre_bump_hooks_executed() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
     let marker_file = dir.path().join("pre_bump_marker.txt");
 
@@ -1776,12 +1923,16 @@ pre_bump_hooks = ["echo '{{{{version}}}}' > {}"]
 "#,
         marker_file.display()
     );
-    std::fs::write(&manifest_path, &cargo_content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, cargo_content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     init_test_git_repo(dir.path());
 
@@ -1800,15 +1951,17 @@ pre_bump_hooks = ["echo '{{{{version}}}}' > {}"]
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify hook was executed with correct version
     assert!(
-        marker_file.exists(),
+        async_fs_io::try_exists(&marker_file).await.unwrap(),
         "Pre-bump hook should have created marker file"
     );
-    let content = std::fs::read_to_string(&marker_file).unwrap();
+    let content = async_fs_io::read_string_bounded(&marker_file, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert_eq!(
         content.trim(),
         "1.0.1",
@@ -1817,11 +1970,13 @@ pre_bump_hooks = ["echo '{{{{version}}}}' > {}"]
 }
 
 /// Test that failing pre_bump_hooks abort the bump operation.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_pre_bump_hooks_failure_aborts_bump() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_pre_bump_hooks_failure_aborts_bump() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
 
     // Create Cargo.toml with a failing pre_bump_hook
@@ -1832,12 +1987,16 @@ version = "1.0.0"
 [package.metadata.version-info]
 pre_bump_hooks = ["exit 1"]
 "#;
-    std::fs::write(&manifest_path, cargo_content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, cargo_content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     init_test_git_repo(dir.path());
 
@@ -1856,7 +2015,7 @@ pre_bump_hooks = ["exit 1"]
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_err(), "Bump should fail when pre_bump_hook fails");
 
     // Verify error message mentions hook failure
@@ -1869,11 +2028,13 @@ pre_bump_hooks = ["exit 1"]
 }
 
 /// Test that post_bump_hooks are executed after successful commit.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_post_bump_hooks_executed_after_commit() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_post_bump_hooks_executed_after_commit() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
     let marker_file = dir.path().join("post_bump_marker.txt");
 
@@ -1888,12 +2049,16 @@ post_bump_hooks = ["echo '{{{{version}}}}' > {}"]
 "#,
         marker_file.display()
     );
-    std::fs::write(&manifest_path, &cargo_content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, cargo_content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     init_test_git_repo(dir.path());
 
@@ -1912,15 +2077,17 @@ post_bump_hooks = ["echo '{{{{version}}}}' > {}"]
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify post-bump hook was executed
     assert!(
-        marker_file.exists(),
+        async_fs_io::try_exists(&marker_file).await.unwrap(),
         "Post-bump hook should have created marker file"
     );
-    let content = std::fs::read_to_string(&marker_file).unwrap();
+    let content = async_fs_io::read_string_bounded(&marker_file, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert_eq!(
         content.trim(),
         "1.0.1",
@@ -1929,11 +2096,13 @@ post_bump_hooks = ["echo '{{{{version}}}}' > {}"]
 }
 
 /// Test that post_bump_hooks are NOT executed when --no-commit is used.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_post_bump_hooks_skipped_with_no_commit() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_post_bump_hooks_skipped_with_no_commit() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
     let marker_file = dir.path().join("post_bump_marker.txt");
 
@@ -1948,12 +2117,16 @@ post_bump_hooks = ["echo 'executed' > {}"]
 "#,
         marker_file.display()
     );
-    std::fs::write(&manifest_path, &cargo_content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, cargo_content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     init_test_git_repo(dir.path());
 
@@ -1972,27 +2145,31 @@ post_bump_hooks = ["echo 'executed' > {}"]
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify post-bump hook was NOT executed
     assert!(
-        !marker_file.exists(),
+        !async_fs_io::try_exists(&marker_file).await.unwrap(),
         "Post-bump hook should NOT run when --no-commit is used"
     );
 }
 
 /// Test that additional_files are included in the version bump commit.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_additional_files_included_in_commit() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_additional_files_included_in_commit() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
     let package_json = dir.path().join("package.json");
 
     // Create initial package.json
-    std::fs::write(&package_json, r#"{"version": "1.0.0"}"#).unwrap();
+    async_fs_io::write_bytes(&package_json, r#"{"version": "1.0.0"}"#.as_bytes())
+        .await
+        .unwrap();
 
     // Create Cargo.toml with hooks that update package.json
     let cargo_content = format!(
@@ -2006,12 +2183,16 @@ additional_files = ["package.json"]
 "#,
         package_json.display()
     );
-    std::fs::write(&manifest_path, &cargo_content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, cargo_content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     // Initialize git and add package.json to initial commit
     std::process::Command::new("git")
@@ -2060,7 +2241,7 @@ additional_files = ["package.json"]
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify package.json is in the commit with updated version
@@ -2091,11 +2272,13 @@ additional_files = ["package.json"]
 }
 
 /// Test that multiple pre_bump_hooks run in order.
-#[test]
+#[tokio::test]
 #[serial_test::serial]
 #[cfg(unix)]
-fn test_multiple_pre_bump_hooks_run_in_order() {
-    let dir = tempfile::tempdir().unwrap();
+async fn test_multiple_pre_bump_hooks_run_in_order() {
+    let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+        .await
+        .unwrap();
     let manifest_path = dir.path().join("Cargo.toml");
     let marker_file = dir.path().join("hook_order.txt");
 
@@ -2116,12 +2299,16 @@ pre_bump_hooks = [
         marker_file.display(),
         marker_file.display()
     );
-    std::fs::write(&manifest_path, &cargo_content).unwrap();
+    async_fs_io::write_bytes(&manifest_path, cargo_content.as_bytes())
+        .await
+        .unwrap();
 
     // Create src directory
     let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).unwrap();
-    std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+    async_fs_io::ensure_dir(&src_dir).await.unwrap();
+    async_fs_io::write_bytes(src_dir.join("lib.rs"), "// Test library\n".as_bytes())
+        .await
+        .unwrap();
 
     init_test_git_repo(dir.path());
 
@@ -2140,25 +2327,28 @@ pre_bump_hooks = [
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump failed: {:?}", result.err());
 
     // Verify hooks ran in order
-    let content = std::fs::read_to_string(&marker_file).unwrap();
+    let content = async_fs_io::read_string_bounded(&marker_file, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     let lines: Vec<&str> = content.lines().collect();
     assert_eq!(lines, vec!["first", "second", "third"]);
 }
 
 /// Test that empty hook configuration works (no hooks configured).
-#[test]
+#[tokio::test]
 #[serial_test::serial]
-fn test_no_hooks_configured() {
+async fn test_no_hooks_configured() {
     let dir = create_temp_cargo_project(
         r#"[package]
 name = "test-no-hooks"
 version = "1.0.0"
 "#,
-    );
+    )
+    .await;
     let manifest_path = dir.path().join("Cargo.toml");
 
     init_test_git_repo(dir.path());
@@ -2178,9 +2368,11 @@ version = "1.0.0"
         no_readme: true,
     };
 
-    let result = bump(args);
+    let result = bump(args).await;
     assert!(result.is_ok(), "Bump should work without hooks configured");
 
-    let content = std::fs::read_to_string(&manifest_path).unwrap();
+    let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+        .await
+        .unwrap();
     assert!(content.contains("version = \"1.0.1\""));
 }

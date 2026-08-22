@@ -103,10 +103,11 @@ pub struct PreBumpHookArgs {
 ///     pre_bump_hook,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = PreBumpHookArgs::parse_from(&["cargo", "version-info", "pre-bump-hook"]);
-/// pre_bump_hook(args)?;
+/// pre_bump_hook(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -134,7 +135,7 @@ pub struct PreBumpHookArgs {
 ///   Current version: 0.0.0
 ///   Target version: 1.0.0
 /// ```
-pub fn pre_bump_hook(args: PreBumpHookArgs) -> Result<()> {
+pub async fn pre_bump_hook(args: PreBumpHookArgs) -> Result<()> {
     let mut logger = cargo_plugin_utils::logger::Logger::new();
 
     logger.status("Reading", "package version");
@@ -234,23 +235,28 @@ pub fn pre_bump_hook(args: PreBumpHookArgs) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn create_temp_cargo_project(content: &str) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_temp_cargo_project(content: &str) -> async_fs_io::TempDir {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let manifest_path = dir.path().join("Cargo.toml");
-        std::fs::write(&manifest_path, content).unwrap();
+        async_fs_io::write_bytes(&manifest_path, content.as_bytes())
+            .await
+            .unwrap();
         dir
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_pre_bump_hook_success() {
+    async fn test_pre_bump_hook_success() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "0.1.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = PreBumpHookArgs {
             manifest_path: Some(manifest_path),
@@ -260,19 +266,20 @@ version = "0.1.0"
             exit_on_error: true,
         };
         // Will succeed if git repo exists and versions match, otherwise may fail
-        let _ = pre_bump_hook(args);
+        let _ = pre_bump_hook(args).await;
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_pre_bump_hook_major_bump_warning() {
+    async fn test_pre_bump_hook_major_bump_warning() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "0.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = PreBumpHookArgs {
             manifest_path: Some(manifest_path),
@@ -282,22 +289,23 @@ version = "0.0.0"
             exit_on_error: false, // Don't fail on warnings
         };
         // Should warn but not fail
-        let result = pre_bump_hook(args);
+        let result = pre_bump_hook(args).await;
         // May succeed or fail depending on git state, but shouldn't fail on major bump
         // warning
         let _ = result;
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_pre_bump_hook_no_target_version() {
+    async fn test_pre_bump_hook_no_target_version() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "0.2.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = PreBumpHookArgs {
             manifest_path: Some(manifest_path),
@@ -306,12 +314,12 @@ version = "0.2.0"
             current_version: None,
             exit_on_error: true,
         };
-        let _ = pre_bump_hook(args);
+        let _ = pre_bump_hook(args).await;
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_pre_bump_hook_file_not_found() {
+    async fn test_pre_bump_hook_file_not_found() {
         let args = PreBumpHookArgs {
             manifest_path: Some("/nonexistent/Cargo.toml".into()),
             repo_path: ".".into(),
@@ -319,18 +327,19 @@ version = "0.2.0"
             current_version: None,
             exit_on_error: true,
         };
-        assert!(pre_bump_hook(args).is_err());
+        assert!(pre_bump_hook(args).await.is_err());
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_pre_bump_hook_no_version() {
+    async fn test_pre_bump_hook_no_version() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = PreBumpHookArgs {
             manifest_path: Some(manifest_path),
@@ -339,18 +348,19 @@ name = "test"
             current_version: None,
             exit_on_error: true,
         };
-        assert!(pre_bump_hook(args).is_err());
+        assert!(pre_bump_hook(args).await.is_err());
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_pre_bump_hook_workspace_version() {
+    async fn test_pre_bump_hook_workspace_version() {
         let _dir = create_temp_cargo_project(
             r#"
 [workspace.package]
 version = "1.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = PreBumpHookArgs {
             manifest_path: Some(manifest_path),
@@ -359,6 +369,6 @@ version = "1.0.0"
             current_version: None,
             exit_on_error: true,
         };
-        let _ = pre_bump_hook(args);
+        let _ = pre_bump_hook(args).await;
     }
 }

@@ -63,10 +63,11 @@ pub struct DevArgs {
 ///     dev,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = DevArgs::parse_from(&["cargo", "version-info", "dev"]);
-/// dev(args)?;
+/// dev(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -82,7 +83,7 @@ pub struct DevArgs {
 /// ```json
 /// {"version":"0.0.0-dev-a1b2c3d","sha":"a1b2c3d"}
 /// ```
-pub fn dev(args: DevArgs) -> Result<()> {
+pub async fn dev(args: DevArgs) -> Result<()> {
     let repo = gix::discover(&args.repo_path).with_context(|| {
         format!(
             "Failed to discover git repository at {}",
@@ -114,8 +115,8 @@ pub fn dev(args: DevArgs) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_dev_current_repo() {
+    #[tokio::test]
+    async fn test_dev_current_repo() {
         // Test with current directory (should work if run from git repo)
         let args = DevArgs {
             repo_path: ".".into(),
@@ -123,7 +124,7 @@ mod tests {
         };
         // This will only work if run from a git repository
         // We'll just verify it doesn't panic on invalid format
-        let result = dev(args);
+        let result = dev(args).await;
         // Either succeeds (in git repo) or fails gracefully
         if let Err(e) = result {
             // Check it's the expected error type
@@ -136,24 +137,24 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_dev_json_format() {
+    #[tokio::test]
+    async fn test_dev_json_format() {
         let args = DevArgs {
             repo_path: ".".into(),
             format: "json".to_string(),
         };
         // Same as above - will work if in git repo, otherwise fail gracefully
-        let _ = dev(args);
+        let _ = dev(args).await;
     }
 
-    #[test]
-    fn test_dev_invalid_format() {
+    #[tokio::test]
+    async fn test_dev_invalid_format() {
         let args = DevArgs {
             repo_path: ".".into(),
             format: "invalid".to_string(),
         };
         // Should fail on invalid format even if repo is valid
-        let result = dev(args);
+        let result = dev(args).await;
         // If repo is invalid, we get repo error; if repo is valid, we get format error
         // The format check happens after repo discovery, so we may get either error
         if let Err(e) = result {
@@ -171,12 +172,12 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_dev_nonexistent_repo() {
+    #[tokio::test]
+    async fn test_dev_nonexistent_repo() {
         let args = DevArgs {
             repo_path: "/nonexistent/path".into(),
             format: "version".to_string(),
         };
-        assert!(dev(args).is_err());
+        assert!(dev(args).await.is_err());
     }
 }

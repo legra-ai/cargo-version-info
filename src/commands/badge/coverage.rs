@@ -154,13 +154,13 @@ async fn get_coverage_percentage(
 
 /// Load coverage from cache.
 async fn load_coverage_cache(_package: &cargo_metadata::Package) -> Result<Option<CoverageCache>> {
-    let cache_path = common::get_badge_cache_path("coverage")?;
+    let cache_path = common::get_badge_cache_path("coverage").await?;
 
-    if !cache_path.exists() {
+    if !async_fs_io::try_exists(&cache_path).await? {
         return Ok(None);
     }
 
-    let contents = tokio::fs::read_to_string(&cache_path)
+    let contents = async_fs_io::read_string_bounded(&cache_path, 16 * 1024 * 1024)
         .await
         .context("Failed to read cache file")?;
 
@@ -179,18 +179,18 @@ async fn save_coverage_cache(package: &cargo_metadata::Package, coverage: u8) ->
         coverage,
     };
 
-    let cache_path = common::get_badge_cache_path("coverage")?;
+    let cache_path = common::get_badge_cache_path("coverage").await?;
 
     // Create parent directory if it doesn't exist
     if let Some(parent) = cache_path.parent() {
-        tokio::fs::create_dir_all(parent)
+        async_fs_io::ensure_dir(parent)
             .await
             .context("Failed to create cache directory")?;
     }
 
     let json = serde_json::to_string_pretty(&cache).context("Failed to serialize cache")?;
 
-    tokio::fs::write(&cache_path, json)
+    async_fs_io::write_bytes(&cache_path, json.as_bytes())
         .await
         .context("Failed to write cache file")?;
 

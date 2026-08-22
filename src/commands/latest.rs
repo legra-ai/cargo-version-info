@@ -19,10 +19,7 @@
 //! cargo version-info latest --owner owner --repo repo
 //! ```
 
-use anyhow::{
-    Context,
-    Result,
-};
+use anyhow::Result;
 use cargo_plugin_utils::common::get_owner_repo;
 use clap::Parser;
 
@@ -85,7 +82,8 @@ pub struct LatestArgs {
 ///     latest,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = LatestArgs::parse_from(&[
 ///     "cargo",
@@ -96,7 +94,7 @@ pub struct LatestArgs {
 ///     "--repo",
 ///     "repo",
 /// ]);
-/// latest(args)?;
+/// latest(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -117,16 +115,11 @@ pub struct LatestArgs {
 /// ```json
 /// {"version":"0.1.2","tag":"v0.1.2"}
 /// ```
-pub fn latest(args: LatestArgs) -> Result<()> {
+pub async fn latest(args: LatestArgs) -> Result<()> {
     let (owner, repo) = get_owner_repo(args.owner, args.repo)?;
     let github_token = args.github_token.as_deref();
 
-    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-    let latest = rt.block_on(github::get_latest_release_version(
-        &owner,
-        &repo,
-        github_token,
-    ))?;
+    let latest = github::get_latest_release_version(&owner, &repo, github_token).await?;
 
     let latest = latest.unwrap_or_else(|| "0.0.0".to_string());
 

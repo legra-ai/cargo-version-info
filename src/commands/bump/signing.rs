@@ -491,21 +491,21 @@ fn write_signature(buf: &mut Vec<u8>, sig: &gix::actor::Signature) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_signing_format_default() {
+    #[tokio::test]
+    async fn test_signing_format_default() {
         assert_eq!(SigningFormat::default(), SigningFormat::Ssh);
     }
 
-    #[test]
-    fn test_signing_config_default() {
+    #[tokio::test]
+    async fn test_signing_config_default() {
         let config = SigningConfig::default();
         assert!(!config.enabled);
         assert_eq!(config.format, SigningFormat::Ssh);
         assert!(config.signing_key.is_none());
     }
 
-    #[test]
-    fn test_format_signature_for_header() {
+    #[tokio::test]
+    async fn test_format_signature_for_header() {
         // format_signature_for_header now just passes through the signature
         // (gix handles the multiline formatting in extra_headers)
         let signature = b"-----BEGIN SSH SIGNATURE-----\nline1\nline2\n-----END SSH SIGNATURE-----";
@@ -515,8 +515,8 @@ mod tests {
         assert_eq!(formatted, signature);
     }
 
-    #[test]
-    fn test_write_signature_positive_offset() {
+    #[tokio::test]
+    async fn test_write_signature_positive_offset() {
         let mut buf = Vec::new();
         let sig = gix::actor::Signature {
             name: "Test User".into(),
@@ -535,8 +535,8 @@ mod tests {
         assert!(result.contains("+0100"));
     }
 
-    #[test]
-    fn test_write_signature_negative_offset() {
+    #[tokio::test]
+    async fn test_write_signature_negative_offset() {
         let mut buf = Vec::new();
         let sig = gix::actor::Signature {
             name: "Test User".into(),
@@ -555,15 +555,15 @@ mod tests {
         assert!(result.contains("-0500"));
     }
 
-    #[test]
-    fn test_sign_disabled() {
+    #[tokio::test]
+    async fn test_sign_disabled() {
         let config = SigningConfig::default();
         let result = sign_commit_payload(&config, b"test payload").unwrap();
         assert!(result.is_none());
     }
 
-    #[test]
-    fn test_sign_enabled_no_key() {
+    #[tokio::test]
+    async fn test_sign_enabled_no_key() {
         let config = SigningConfig {
             enabled: true,
             format: SigningFormat::Ssh,
@@ -574,8 +574,8 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("signing key"));
     }
 
-    #[test]
-    fn test_sign_gpg_not_implemented() {
+    #[tokio::test]
+    async fn test_sign_gpg_not_implemented() {
         let config = SigningConfig {
             enabled: true,
             format: SigningFormat::Gpg,
@@ -595,10 +595,12 @@ mod tests {
     ///
     /// Creates an isolated git repo that ignores global and system config
     /// by setting GIT_CONFIG_NOSYSTEM and creating a local config.
-    fn create_test_repo() -> (tempfile::TempDir, gix::Repository) {
+    async fn create_test_repo() -> (async_fs_io::TempDir, gix::Repository) {
         use std::process::Command;
 
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp directory");
+        let temp_dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .expect("Failed to create temp directory");
         let dir = temp_dir.path();
 
         // Initialize git repo
@@ -642,10 +644,10 @@ mod tests {
         (temp_dir, repo)
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_read_signing_config_no_signing() {
-        let (_temp_dir, repo) = create_test_repo();
+    async fn test_read_signing_config_no_signing() {
+        let (_temp_dir, repo) = create_test_repo().await;
 
         let config = read_signing_config(&repo);
 
@@ -654,12 +656,12 @@ mod tests {
         assert!(config.signing_key.is_none());
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_read_signing_config_enabled_no_key() {
+    async fn test_read_signing_config_enabled_no_key() {
         use std::process::Command;
 
-        let (temp_dir, _repo) = create_test_repo();
+        let (temp_dir, _repo) = create_test_repo().await;
         let dir = temp_dir.path();
 
         // Enable signing without a key
@@ -679,12 +681,12 @@ mod tests {
         assert!(config.signing_key.is_none());
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_read_signing_config_ssh() {
+    async fn test_read_signing_config_ssh() {
         use std::process::Command;
 
-        let (temp_dir, _repo) = create_test_repo();
+        let (temp_dir, _repo) = create_test_repo().await;
         let dir = temp_dir.path();
 
         // Set up SSH signing config
@@ -719,12 +721,12 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_read_signing_config_gpg() {
+    async fn test_read_signing_config_gpg() {
         use std::process::Command;
 
-        let (temp_dir, _repo) = create_test_repo();
+        let (temp_dir, _repo) = create_test_repo().await;
         let dir = temp_dir.path();
 
         // Set up GPG signing config
@@ -756,8 +758,8 @@ mod tests {
         assert_eq!(config.signing_key, Some("ABCD1234EFGH5678".to_string()));
     }
 
-    #[test]
-    fn test_build_commit_payload() {
+    #[tokio::test]
+    async fn test_build_commit_payload() {
         let tree_id = gix::ObjectId::from_hex(b"0123456789abcdef0123456789abcdef01234567")
             .expect("Invalid tree ID");
         let parent_id = gix::ObjectId::from_hex(b"fedcba9876543210fedcba9876543210fedcba98")

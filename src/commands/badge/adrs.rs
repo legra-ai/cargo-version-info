@@ -3,6 +3,7 @@
 use std::io::Write;
 
 use anyhow::Result;
+use async_fs_io::try_exists;
 
 /// Show the ADRs badge.
 pub async fn badge_adrs(writer: &mut dyn Write, package: &cargo_metadata::Package) -> Result<()> {
@@ -17,7 +18,7 @@ pub async fn badge_adrs(writer: &mut dyn Write, package: &cargo_metadata::Packag
 
     // Check if docs/adr/ directory exists
     let adr_dir = manifest_dir.join("docs/adr");
-    let has_adrs = tokio::fs::metadata(&adr_dir).await.is_ok();
+    let has_adrs = try_exists(&adr_dir).await?;
 
     if has_adrs {
         let badge_url = "https://img.shields.io/badge/ADRs-index-informational";

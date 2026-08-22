@@ -31,6 +31,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::write_bytes;
 use bstr::{
     BString,
     ByteSlice,
@@ -462,14 +463,15 @@ pub fn generate_changelog_to_writer(
 }
 
 /// Generate changelog from git commits.
-pub fn changelog(args: ChangelogArgs) -> Result<()> {
+pub async fn changelog(args: ChangelogArgs) -> Result<()> {
     let output_path = args.output.clone();
 
     if let Some(ref path) = output_path {
-        // Write to file
-        let mut file = std::fs::File::create(path)
-            .with_context(|| format!("Failed to create file {}", path))?;
-        generate_changelog_to_writer(&mut file, args)?;
+        let mut output = Vec::new();
+        generate_changelog_to_writer(&mut output, args)?;
+        write_bytes(path, &output)
+            .await
+            .with_context(|| format!("Failed to write file {}", path))?;
     } else {
         // Write to stdout
         let mut stdout = std::io::stdout();
@@ -483,12 +485,15 @@ pub fn changelog(args: ChangelogArgs) -> Result<()> {
 mod tests {
     use std::process::Command;
 
-    use tempfile::TempDir;
-
     use super::*;
 
-    fn create_test_git_repo_with_tags_and_commits(tags: &[&str], commits: &[&str]) -> TempDir {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_test_git_repo_with_tags_and_commits(
+        tags: &[&str],
+        commits: &[&str],
+    ) -> async_fs_io::TempDir {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
 
         // Initialize git repo
         Command::new("git")
@@ -510,7 +515,9 @@ mod tests {
             .unwrap();
 
         // Create an initial commit
-        std::fs::write(dir.path().join("README.md"), "# Test\n").unwrap();
+        async_fs_io::write_bytes(dir.path().join("README.md"), b"# Test\n")
+            .await
+            .unwrap();
         Command::new("git")
             .args(["add", "README.md"])
             .current_dir(dir.path())
@@ -526,7 +533,9 @@ mod tests {
         // Create commits (with conventional commit format)
         for commit_msg in commits {
             let file_name = format!("file_{}.txt", commit_msg.replace([' ', ':'], "_"));
-            std::fs::write(dir.path().join(&file_name), commit_msg).unwrap();
+            async_fs_io::write_bytes(dir.path().join(&file_name), commit_msg.as_bytes())
+                .await
+                .unwrap();
             Command::new("git")
                 .args(["add", &file_name])
                 .current_dir(dir.path())
@@ -551,8 +560,8 @@ mod tests {
         dir
     }
 
-    #[test]
-    fn test_changelog_finds_latest_tag_not_first() {
+    #[tokio::test]
+    async fn test_changelog_finds_latest_tag_not_first() {
         // Test that changelog finds the latest version tag, not just the first one
         let _dir = create_test_git_repo_with_tags_and_commits(
             &["v0.1.0", "v0.1.5", "v0.2.0"], // Multiple tags - v0.2.0 should be latest
@@ -561,7 +570,8 @@ mod tests {
                 "fix(test): fix bug for v0.1.5",
                 "feat(test): add feature for v0.2.0",
             ],
-        );
+        )
+        .await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -587,10 +597,11 @@ mod tests {
         // v0.2.0, which may be none)
     }
 
-    #[test]
-    fn test_changelog_with_for_version() {
+    #[tokio::test]
+    async fn test_changelog_with_for_version() {
         let _dir =
-            create_test_git_repo_with_tags_and_commits(&["v0.1.0"], &["feat(test): add feature"]);
+            create_test_git_repo_with_tags_and_commits(&["v0.1.0"], &["feat(test): add feature"])
+                .await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -617,9 +628,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_changelog_with_for_version_no_v_prefix() {
-        let _dir = create_test_git_repo_with_tags_and_commits(&["v0.1.0"], &[]);
+    #[tokio::test]
+    async fn test_changelog_with_for_version_no_v_prefix() {
+        let _dir = create_test_git_repo_with_tags_and_commits(&["v0.1.0"], &[]).await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -646,13 +657,14 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_changelog_no_tags() {
+    #[tokio::test]
+    async fn test_changelog_no_tags() {
         // Test changelog generation when no tags exist - should generate from beginning
         let _dir = create_test_git_repo_with_tags_and_commits(
             &[],
             &["feat(test): add feature", "fix(test): fix bug"],
-        );
+        )
+        .await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -680,12 +692,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_changelog_with_range() {
+    #[tokio::test]
+    async fn test_changelog_with_range() {
         let _dir = create_test_git_repo_with_tags_and_commits(
             &["v0.1.0", "v0.2.0"],
             &["feat(test): add feature"],
-        );
+        )
+        .await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 

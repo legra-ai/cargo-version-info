@@ -60,10 +60,11 @@ pub struct TagArgs {
 ///     tag,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = TagArgs::parse_from(&["cargo", "version-info", "tag", "0.1.2"]);
-/// tag(args)?; // Prints "v0.1.2"
+/// tag(args).await?; // Prints "v0.1.2"
 ///
 /// # Ok(())
 /// # }
@@ -80,7 +81,7 @@ pub struct TagArgs {
 /// ```json
 /// {"tag":"v0.1.2","version":"0.1.2"}
 /// ```
-pub fn tag(args: TagArgs) -> Result<()> {
+pub async fn tag(args: TagArgs) -> Result<()> {
     let (major, minor, patch) = parse_version(&args.version)?;
     let tag = format_tag(major, minor, patch);
 
@@ -97,57 +98,57 @@ pub fn tag(args: TagArgs) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_tag_version_format() {
+    #[tokio::test]
+    async fn test_tag_version_format() {
         let args = TagArgs {
             version: "0.1.2".to_string(),
             format: "tag".to_string(),
         };
-        assert!(tag(args).is_ok());
+        assert!(tag(args).await.is_ok());
     }
 
-    #[test]
-    fn test_tag_with_v_prefix() {
+    #[tokio::test]
+    async fn test_tag_with_v_prefix() {
         let args = TagArgs {
             version: "v0.1.2".to_string(),
             format: "tag".to_string(),
         };
-        assert!(tag(args).is_ok());
+        assert!(tag(args).await.is_ok());
     }
 
-    #[test]
-    fn test_tag_json_format() {
+    #[tokio::test]
+    async fn test_tag_json_format() {
         let args = TagArgs {
             version: "1.2.3".to_string(),
             format: "json".to_string(),
         };
-        assert!(tag(args).is_ok());
+        assert!(tag(args).await.is_ok());
     }
 
-    #[test]
-    fn test_tag_invalid_version() {
+    #[tokio::test]
+    async fn test_tag_invalid_version() {
         let args = TagArgs {
             version: "invalid".to_string(),
             format: "tag".to_string(),
         };
-        assert!(tag(args).is_err());
+        assert!(tag(args).await.is_err());
     }
 
-    #[test]
-    fn test_tag_invalid_format() {
+    #[tokio::test]
+    async fn test_tag_invalid_format() {
         let args = TagArgs {
             version: "0.1.2".to_string(),
             format: "invalid".to_string(),
         };
-        assert!(tag(args).is_err());
+        assert!(tag(args).await.is_err());
     }
 
-    #[test]
-    fn test_tag_major_version() {
+    #[tokio::test]
+    async fn test_tag_major_version() {
         let args = TagArgs {
             version: "10.20.30".to_string(),
             format: "tag".to_string(),
         };
-        assert!(tag(args).is_ok());
+        assert!(tag(args).await.is_ok());
     }
 }

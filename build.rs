@@ -12,12 +12,10 @@
 //! Note: GitHub API fallback is skipped in build.rs to avoid heavy
 //! dependencies.
 
+use std::env;
 use std::path::PathBuf;
-use std::{
-    env,
-    fs,
-};
 
+use async_fs_io::read_string_bounded;
 use rhusky::Rhusky;
 
 fn main() {
@@ -28,7 +26,11 @@ fn main() {
         .install_from_build_script()
         .expect("failed to install repository Git hooks");
 
-    let version = compute_version_string(".").unwrap_or_else(|e| {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("failed to create build-script runtime");
+    let version = runtime.block_on(compute_version_string(".")).unwrap_or_else(|e| {
         eprintln!(
             "cargo:warning=Version computation failed: {}, using fallback",
             e
@@ -43,7 +45,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION_OVERRIDE");
 }
 
-fn compute_version_string(
+async fn compute_version_string(
     repo_path: impl Into<PathBuf>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let repo_root: PathBuf = repo_path.into();
@@ -61,7 +63,7 @@ fn compute_version_string(
 
     // Fall back to manifest version (from Cargo.toml), optionally append SHA if
     // available
-    if let Some(manifest_version) = read_manifest_version(&manifest) {
+    if let Some(manifest_version) = read_manifest_version(&manifest).await {
         let trimmed = manifest_version.trim();
         if !trimmed.is_empty() && trimmed != "0.0.0" {
             let version_with_sha = short_sha(&repo_root)
@@ -96,8 +98,8 @@ fn short_sha(repo_path: &PathBuf) -> Option<String> {
     Some(short.to_string())
 }
 
-fn read_manifest_version(manifest: &PathBuf) -> Option<String> {
-    let contents = fs::read_to_string(manifest).ok()?;
+async fn read_manifest_version(manifest: &PathBuf) -> Option<String> {
+    let contents = read_string_bounded(manifest, 16 * 1024 * 1024).await.ok()?;
     let value: toml::Value = toml::from_str(&contents).ok()?;
     value
         .get("package")
