@@ -18,11 +18,11 @@
 //! use std::path::Path;
 //!
 //! # use anyhow::Result;
-//! # fn example() -> Result<()> {
+//! # async fn example() -> Result<()> {
 //! use cargo_version_info::commands::bump::version_update::update_cargo_toml_version;
 //!
 //! let manifest = Path::new("Cargo.toml");
-//! update_cargo_toml_version(manifest, "0.1.0", "0.2.0")?;
+//! update_cargo_toml_version(manifest, "0.1.0", "0.2.0").await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -47,6 +47,10 @@ use std::path::Path;
 use anyhow::{
     Context,
     Result,
+};
+use async_fs_io::{
+    read_string_bounded,
+    write_bytes,
 };
 use toml_edit::{
     DocumentMut,
@@ -78,11 +82,11 @@ use toml_edit::{
 /// ```rust,no_run
 /// # use std::path::Path;
 /// # use anyhow::Result;
-/// # fn example() -> Result<()> {
+/// # async fn example() -> Result<()> {
 /// use cargo_version_info::commands::bump::version_update::update_cargo_toml_version;
 ///
 /// let manifest = Path::new("./Cargo.toml");
-/// update_cargo_toml_version(manifest, "1.0.0", "1.1.0")?;
+/// update_cargo_toml_version(manifest, "1.0.0", "1.1.0").await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -110,13 +114,14 @@ use toml_edit::{
 /// version = "0.2.0"  # Current version
 /// edition = "2021"
 /// ```
-pub fn update_cargo_toml_version(
+pub async fn update_cargo_toml_version(
     manifest_path: &Path,
     _old_version: &str,
     new_version: &str,
 ) -> Result<()> {
     // Read the current content
-    let content = std::fs::read_to_string(manifest_path)
+    let content = read_string_bounded(manifest_path, 16 * 1024 * 1024)
+        .await
         .with_context(|| format!("Failed to read {}", manifest_path.display()))?;
 
     // Parse the TOML document while preserving formatting
@@ -162,7 +167,9 @@ pub fn update_cargo_toml_version(
     // Write back the modified document
     // The to_string() method serializes the document while preserving all
     // formatting that was tracked during parsing
-    std::fs::write(manifest_path, doc.to_string())
+    let serialized = doc.to_string();
+    write_bytes(manifest_path, serialized.as_bytes())
+        .await
         .with_context(|| format!("Failed to write {}", manifest_path.display()))?;
 
     Ok(())
@@ -170,60 +177,77 @@ pub fn update_cargo_toml_version(
 
 #[cfg(test)]
 mod tests {
-    use tempfile::TempDir;
-
     use super::*;
 
-    fn create_temp_manifest(content: &str) -> (TempDir, std::path::PathBuf) {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_temp_manifest(content: &str) -> (async_fs_io::TempDir, std::path::PathBuf) {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let manifest_path = dir.path().join("Cargo.toml");
-        std::fs::write(&manifest_path, content).unwrap();
+        async_fs_io::write_bytes(&manifest_path, content.as_bytes())
+            .await
+            .unwrap();
         (dir, manifest_path)
     }
 
-    #[test]
-    fn test_update_package_version() {
+    #[tokio::test]
+    async fn test_update_package_version() {
         let (_dir, manifest_path) = create_temp_manifest(
             r#"[package]
 name = "test"
 version = "0.1.0"
 "#,
-        );
+        )
+        .await;
 
-        update_cargo_toml_version(&manifest_path, "0.1.0", "0.2.0").unwrap();
+        update_cargo_toml_version(&manifest_path, "0.1.0", "0.2.0")
+            .await
+            .unwrap();
 
-        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         assert!(content.contains("version = \"0.2.0\""));
         assert!(!content.contains("0.1.0"));
     }
 
-    #[test]
-    fn test_update_workspace_package_version() {
+    #[tokio::test]
+    async fn test_update_workspace_package_version() {
         let (_dir, manifest_path) = create_temp_manifest(
             r#"[workspace.package]
 version = "1.0.0"
 "#,
-        );
+        )
+        .await;
 
-        update_cargo_toml_version(&manifest_path, "1.0.0", "2.0.0").unwrap();
+        update_cargo_toml_version(&manifest_path, "1.0.0", "2.0.0")
+            .await
+            .unwrap();
 
-        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         assert!(content.contains("version = \"2.0.0\""));
     }
 
-    #[test]
-    fn test_preserves_formatting() {
+    #[tokio::test]
+    async fn test_preserves_formatting() {
         let (_dir, manifest_path) = create_temp_manifest(
             r#"[package]
 name = "test"  # Package name
 version = "0.1.0"
 edition = "2021"
 "#,
-        );
+        )
+        .await;
 
-        update_cargo_toml_version(&manifest_path, "0.1.0", "0.2.0").unwrap();
+        update_cargo_toml_version(&manifest_path, "0.1.0", "0.2.0")
+            .await
+            .unwrap();
 
-        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         // Verify comments are preserved
         assert!(content.contains("# Package name"));
         // Verify version was updated
@@ -232,8 +256,8 @@ edition = "2021"
         assert!(!content.contains("0.1.0"));
     }
 
-    #[test]
-    fn test_update_both_package_and_workspace_version() {
+    #[tokio::test]
+    async fn test_update_both_package_and_workspace_version() {
         // Test case: Cargo.toml with both [workspace.package] and [package]
         // having explicit version fields (like dotenvage)
         let (_dir, manifest_path) = create_temp_manifest(
@@ -249,11 +273,16 @@ name = "dotenvage"
 version = "0.2.1"
 edition.workspace = true
 "#,
-        );
+        )
+        .await;
 
-        update_cargo_toml_version(&manifest_path, "0.2.1", "0.2.2").unwrap();
+        update_cargo_toml_version(&manifest_path, "0.2.1", "0.2.2")
+            .await
+            .unwrap();
 
-        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         // Both sections should be updated
         assert!(!content.contains("0.2.1"), "Old version should be gone");
         // Count occurrences of new version - should appear twice
@@ -261,8 +290,8 @@ edition.workspace = true
         assert_eq!(count, 2, "New version should appear in both sections");
     }
 
-    #[test]
-    fn test_package_with_workspace_inheritance_not_updated() {
+    #[tokio::test]
+    async fn test_package_with_workspace_inheritance_not_updated() {
         // Test case: [package] version inherits from workspace (version.workspace =
         // true) Only [workspace.package] should be updated
         let (_dir, manifest_path) = create_temp_manifest(
@@ -273,26 +302,32 @@ version = "1.0.0"
 name = "test"
 version.workspace = true
 "#,
-        );
+        )
+        .await;
 
-        update_cargo_toml_version(&manifest_path, "1.0.0", "2.0.0").unwrap();
+        update_cargo_toml_version(&manifest_path, "1.0.0", "2.0.0")
+            .await
+            .unwrap();
 
-        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         // workspace.package should be updated
         assert!(content.contains("[workspace.package]\nversion = \"2.0.0\""));
         // package should still have workspace inheritance
         assert!(content.contains("version.workspace = true"));
     }
 
-    #[test]
-    fn test_no_package_section_error() {
+    #[tokio::test]
+    async fn test_no_package_section_error() {
         let (_dir, manifest_path) = create_temp_manifest(
             r#"[dependencies]
 some-crate = "1.0"
 "#,
-        );
+        )
+        .await;
 
-        let result = update_cargo_toml_version(&manifest_path, "0.1.0", "0.2.0");
+        let result = update_cargo_toml_version(&manifest_path, "0.1.0", "0.2.0").await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Could not find"));
     }

@@ -114,7 +114,7 @@ use gix::index::{
 /// ```rust,no_run
 /// # use anyhow::Result;
 /// # use gix::index::State;
-/// # fn example(repo: &gix::Repository) -> Result<State> {
+/// # async fn example(repo: &gix::Repository) -> Result<State> {
 /// use cargo_version_info::commands::bump::index::stage_file;
 ///
 /// let index_path = repo.path().join("index");
@@ -122,7 +122,7 @@ use gix::index::{
 /// let blob_id = gix::ObjectId::null(repo.object_hash());
 /// let existing_state = State::new(repo.object_hash());
 ///
-/// let new_state = stage_file(&index_path, repo, relative_path, blob_id, existing_state)?;
+/// let new_state = stage_file(&index_path, repo, relative_path, blob_id, existing_state).await?;
 /// # Ok(new_state)
 /// # }
 /// ```
@@ -150,7 +150,7 @@ use gix::index::{
 /// - Binary search during status checks
 /// - Merge operations
 /// - Index format consistency
-pub fn stage_file(
+pub async fn stage_file(
     index_path: &Path,
     repo: &gix::Repository,
     relative_path: &Path,
@@ -205,10 +205,12 @@ pub fn stage_file(
     new_state.sort_entries();
 
     // Write the updated index back to disk
-    let mut index_file_write =
-        std::fs::File::create(index_path).context("Failed to create index file for writing")?;
+    let mut index_bytes = Vec::new();
     new_state
-        .write_to(&mut index_file_write, gix::index::write::Options::default())
+        .write_to(&mut index_bytes, gix::index::write::Options::default())
+        .context("Failed to write index file")?;
+    async_fs_io::write_bytes(index_path, &index_bytes)
+        .await
         .context("Failed to write index file")?;
 
     Ok(new_state)
@@ -239,7 +241,7 @@ pub fn stage_file(
 ///
 /// ```rust,no_run
 /// # use anyhow::Result;
-/// # fn example(repo: &gix::Repository) -> Result<()> {
+/// # async fn example(repo: &gix::Repository) -> Result<()> {
 /// use cargo_version_info::commands::bump::index::load_index_state;
 ///
 /// let index_path = repo.path().join("index");

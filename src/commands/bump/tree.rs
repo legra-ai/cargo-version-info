@@ -114,7 +114,7 @@ use gix::index::{
 /// ```rust,no_run
 /// # use anyhow::Result;
 /// # use gix::index::State;
-/// # fn example(repo: &gix::Repository, state: &State) -> Result<()> {
+/// # async fn example(repo: &gix::Repository, state: &State) -> Result<()> {
 /// use cargo_version_info::commands::bump::tree::build_tree_from_index;
 ///
 /// let tree_id = build_tree_from_index(state, repo)?;

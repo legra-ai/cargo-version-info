@@ -22,6 +22,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::read_string_bounded;
 use clap::Parser;
 
 /// Arguments for the `rust-toolchain` command.
@@ -62,10 +63,11 @@ pub struct RustToolchainArgs {
 ///     rust_toolchain,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = RustToolchainArgs::parse_from(&["cargo", "version-info", "rust-toolchain"]);
-/// rust_toolchain(args)?;
+/// rust_toolchain(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -81,8 +83,9 @@ pub struct RustToolchainArgs {
 /// ```json
 /// {"version":"1.91.0"}
 /// ```
-pub fn rust_toolchain(args: RustToolchainArgs) -> Result<()> {
-    let content = std::fs::read_to_string(&args.toolchain_file)
+pub async fn rust_toolchain(args: RustToolchainArgs) -> Result<()> {
+    let content = read_string_bounded(&args.toolchain_file, 16 * 1024 * 1024)
+        .await
         .with_context(|| format!("Failed to read {}", args.toolchain_file.display()))?;
 
     // Parse channel = "..." from .rust-toolchain.toml
@@ -119,84 +122,84 @@ pub fn rust_toolchain(args: RustToolchainArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
-    use tempfile::NamedTempFile;
-
     use super::*;
 
-    fn create_temp_toolchain(content: &str) -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+    async fn create_temp_toolchain(content: &str) -> async_fs_io::TempFile {
+        let file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
+        async_fs_io::write_bytes(file.path(), content.as_bytes())
+            .await
+            .unwrap();
         file
     }
 
-    #[test]
-    fn test_rust_toolchain_double_quotes() {
-        let toolchain_file = create_temp_toolchain(r#"channel = "1.91.0""#);
+    #[tokio::test]
+    async fn test_rust_toolchain_double_quotes() {
+        let toolchain_file = create_temp_toolchain(r#"channel = "1.91.0""#).await;
         let args = RustToolchainArgs {
             toolchain_file: toolchain_file.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(rust_toolchain(args).is_ok());
+        assert!(rust_toolchain(args).await.is_ok());
     }
 
-    #[test]
-    fn test_rust_toolchain_single_quotes() {
-        let toolchain_file = create_temp_toolchain(r#"channel = '1.92.0'"#);
+    #[tokio::test]
+    async fn test_rust_toolchain_single_quotes() {
+        let toolchain_file = create_temp_toolchain(r#"channel = '1.92.0'"#).await;
         let args = RustToolchainArgs {
             toolchain_file: toolchain_file.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(rust_toolchain(args).is_ok());
+        assert!(rust_toolchain(args).await.is_ok());
     }
 
-    #[test]
-    fn test_rust_toolchain_json_format() {
-        let toolchain_file = create_temp_toolchain(r#"channel = "2.0.0""#);
+    #[tokio::test]
+    async fn test_rust_toolchain_json_format() {
+        let toolchain_file = create_temp_toolchain(r#"channel = "2.0.0""#).await;
         let args = RustToolchainArgs {
             toolchain_file: toolchain_file.path().to_path_buf(),
             format: "json".to_string(),
         };
-        assert!(rust_toolchain(args).is_ok());
+        assert!(rust_toolchain(args).await.is_ok());
     }
 
-    #[test]
-    fn test_rust_toolchain_no_channel() {
-        let toolchain_file = create_temp_toolchain(r#"# No channel here"#);
+    #[tokio::test]
+    async fn test_rust_toolchain_no_channel() {
+        let toolchain_file = create_temp_toolchain(r#"# No channel here"#).await;
         let args = RustToolchainArgs {
             toolchain_file: toolchain_file.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(rust_toolchain(args).is_err());
+        assert!(rust_toolchain(args).await.is_err());
     }
 
-    #[test]
-    fn test_rust_toolchain_file_not_found() {
+    #[tokio::test]
+    async fn test_rust_toolchain_file_not_found() {
         let args = RustToolchainArgs {
             toolchain_file: "/nonexistent/.rust-toolchain.toml".into(),
             format: "version".to_string(),
         };
-        assert!(rust_toolchain(args).is_err());
+        assert!(rust_toolchain(args).await.is_err());
     }
 
-    #[test]
-    fn test_rust_toolchain_invalid_format() {
-        let toolchain_file = create_temp_toolchain(r#"channel = "1.0.0""#);
+    #[tokio::test]
+    async fn test_rust_toolchain_invalid_format() {
+        let toolchain_file = create_temp_toolchain(r#"channel = "1.0.0""#).await;
         let args = RustToolchainArgs {
             toolchain_file: toolchain_file.path().to_path_buf(),
             format: "invalid".to_string(),
         };
-        assert!(rust_toolchain(args).is_err());
+        assert!(rust_toolchain(args).await.is_err());
     }
 
-    #[test]
-    fn test_rust_toolchain_with_spaces() {
-        let toolchain_file = create_temp_toolchain(r#"channel = "1.93.0"  "#);
+    #[tokio::test]
+    async fn test_rust_toolchain_with_spaces() {
+        let toolchain_file = create_temp_toolchain(r#"channel = "1.93.0"  "#).await;
         let args = RustToolchainArgs {
             toolchain_file: toolchain_file.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(rust_toolchain(args).is_ok());
+        assert!(rust_toolchain(args).await.is_ok());
     }
 }

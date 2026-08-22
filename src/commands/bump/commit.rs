@@ -107,6 +107,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::read_string_bounded;
 use bstr::ByteSlice;
 use smallvec::SmallVec;
 
@@ -169,11 +170,11 @@ pub struct AdditionalFile {
 /// ```rust,no_run
 /// # use std::path::Path;
 /// # use anyhow::Result;
-/// # fn example() -> Result<()> {
+/// # async fn example() -> Result<()> {
 /// use cargo_version_info::commands::bump::commit::commit_version_changes;
 ///
 /// let manifest = Path::new("./Cargo.toml");
-/// commit_version_changes(manifest, "my-crate", "0.1.0", "0.2.0")?;
+/// commit_version_changes(manifest, "my-crate", "0.1.0", "0.2.0").await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -231,7 +232,7 @@ pub struct AdditionalFile {
 ///
 /// Updates the current branch reference to point to the new commit. This is
 /// equivalent to `git commit` moving the branch forward.
-pub fn commit_version_changes(
+pub async fn commit_version_changes(
     manifest_path: &Path,
     crate_name: &str,
     old_version: &str,
@@ -239,6 +240,7 @@ pub fn commit_version_changes(
 ) -> Result<()> {
     // Call the multi-file version with no additional files
     commit_version_changes_with_files(manifest_path, crate_name, old_version, new_version, &[])
+        .await
 }
 
 /// Commit version-related changes along with additional files.
@@ -267,7 +269,7 @@ pub fn commit_version_changes(
 ///
 /// This ensures that unrelated uncommitted changes (typo fixes, dependency
 /// updates, etc.) are not accidentally included in the version bump commit.
-pub fn commit_version_changes_with_files(
+pub async fn commit_version_changes_with_files(
     manifest_path: &Path,
     crate_name: &str,
     old_version: &str,
@@ -289,7 +291,8 @@ pub fn commit_version_changes_with_files(
         .unwrap_or(manifest_path);
 
     // Read current working directory content
-    let current_content = std::fs::read_to_string(manifest_path)
+    let current_content = read_string_bounded(manifest_path, 16 * 1024 * 1024)
+        .await
         .with_context(|| format!("Failed to read {}", manifest_path.display()))?;
 
     // Get HEAD commit to compare against

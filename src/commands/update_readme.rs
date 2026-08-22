@@ -39,7 +39,7 @@ pub struct UpdateReadmeArgs {
 ///
 /// This command is currently a stub and not yet implemented. It will be
 /// available in a future release.
-pub fn update_readme(_args: UpdateReadmeArgs) -> Result<()> {
+pub async fn update_readme(_args: UpdateReadmeArgs) -> Result<()> {
     anyhow::bail!(
         "README update is not yet implemented. This feature will be available in a future release."
     );

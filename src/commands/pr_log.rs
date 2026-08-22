@@ -45,7 +45,7 @@ pub struct PrLogArgs {
 ///
 /// This command is currently a stub and not yet implemented. It will be
 /// available in a future release.
-pub fn pr_log(_args: PrLogArgs) -> Result<()> {
+pub async fn pr_log(_args: PrLogArgs) -> Result<()> {
     anyhow::bail!(
         "PR log generation is not yet implemented. This feature will be available in a future release."
     );

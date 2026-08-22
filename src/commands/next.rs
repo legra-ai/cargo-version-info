@@ -23,6 +23,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::write_bytes;
 use cargo_plugin_utils::common::get_owner_repo;
 use clap::Parser;
 
@@ -93,7 +94,8 @@ pub struct NextArgs {
 ///     next,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = NextArgs::parse_from(&[
 ///     "cargo",
@@ -104,7 +106,7 @@ pub struct NextArgs {
 ///     "--repo",
 ///     "repo",
 /// ]);
-/// next(args)?;
+/// next(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -132,13 +134,11 @@ pub struct NextArgs {
 /// next_version=0.1.3
 /// next_tag=v0.1.3
 /// ```
-pub fn next(args: NextArgs) -> Result<()> {
+pub async fn next(args: NextArgs) -> Result<()> {
     let (owner, repo) = get_owner_repo(args.owner, args.repo)?;
     let github_token = args.github_token.as_deref();
 
-    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-    let (latest, next) =
-        rt.block_on(github::calculate_next_version(&owner, &repo, github_token))?;
+    let (latest, next) = github::calculate_next_version(&owner, &repo, github_token).await?;
 
     let next_tag = {
         let (major, minor, patch) = parse_version(&next)?;
@@ -160,7 +160,8 @@ pub fn next(args: NextArgs) -> Result<()> {
                 "latest_version={}\nnext_version={}\nnext_tag={}\n",
                 latest, next, next_tag
             );
-            std::fs::write(output_file, output)
+            write_bytes(output_file, output.as_bytes())
+                .await
                 .with_context(|| format!("Failed to write to {}", output_file))?;
         }
         _ => anyhow::bail!("Invalid format: {}", args.format),

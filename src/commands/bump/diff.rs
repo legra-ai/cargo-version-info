@@ -525,8 +525,8 @@ pub fn has_non_cargo_lock_version_changes(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_apply_version_hunks_only_version_change() {
+    #[tokio::test]
+    async fn test_apply_version_hunks_only_version_change() {
         let head = "[package]\nname = \"test\"\nversion = \"0.1.0\"\nedition = \"2021\"\n";
         let working = "[package]\nname = \"test\"\nversion = \"0.2.0\"\nedition = \"2021\"\n";
 
@@ -536,8 +536,8 @@ mod tests {
         assert!(!staged.contains("0.1.0"));
     }
 
-    #[test]
-    fn test_apply_version_hunks_mixed_changes() {
+    #[tokio::test]
+    async fn test_apply_version_hunks_mixed_changes() {
         let head = "[package]\nname = \"test\"\nversion = \"0.1.0\"\ndescription = \"old desc\"\n";
         let working =
             "[package]\nname = \"test\"\nversion = \"0.2.0\"\ndescription = \"new desc\"\n";
@@ -551,24 +551,24 @@ mod tests {
         assert!(!staged.contains("description = \"new desc\""));
     }
 
-    #[test]
-    fn test_has_non_version_changes_true() {
+    #[tokio::test]
+    async fn test_has_non_version_changes_true() {
         let head = "[package]\nname = \"test\"\nversion = \"0.1.0\"\n";
         let working = "[package]\nname = \"test-renamed\"\nversion = \"0.2.0\"\n";
 
         assert!(has_non_version_changes(head, working, "0.1.0", "0.2.0"));
     }
 
-    #[test]
-    fn test_has_non_version_changes_false() {
+    #[tokio::test]
+    async fn test_has_non_version_changes_false() {
         let head = "[package]\nname = \"test\"\nversion = \"0.1.0\"\n";
         let working = "[package]\nname = \"test\"\nversion = \"0.2.0\"\n";
 
         assert!(!has_non_version_changes(head, working, "0.1.0", "0.2.0"));
     }
 
-    #[test]
-    fn test_apply_version_hunks_multiple_version_fields() {
+    #[tokio::test]
+    async fn test_apply_version_hunks_multiple_version_fields() {
         let head =
             "[package]\nversion = \"1.0.0\"\n[dependencies]\ncrate-a = { version = \"1.0.0\" }\n";
         let working =
@@ -583,8 +583,8 @@ mod tests {
 
     // README.md selective staging tests
 
-    #[test]
-    fn test_apply_readme_version_hunks_only_version_change() {
+    #[tokio::test]
+    async fn test_apply_readme_version_hunks_only_version_change() {
         let head = r#"# My Crate
 
 Add to Cargo.toml:
@@ -609,8 +609,8 @@ my-crate = "0.2.0"
         assert!(!staged.contains(r#"my-crate = "0.1.0""#));
     }
 
-    #[test]
-    fn test_apply_readme_version_hunks_mixed_changes() {
+    #[tokio::test]
+    async fn test_apply_readme_version_hunks_mixed_changes() {
         let head = r#"# My Crate
 
 Old description.
@@ -638,8 +638,8 @@ my-crate = "0.2.0"
         assert!(!staged.contains("New description"));
     }
 
-    #[test]
-    fn test_apply_readme_version_hunks_underscored_name() {
+    #[tokio::test]
+    async fn test_apply_readme_version_hunks_underscored_name() {
         let head = r#"my_crate = "1.0.0""#;
         let working = r#"my_crate = "1.1.0""#;
 
@@ -649,8 +649,8 @@ my-crate = "0.2.0"
         assert!(staged.contains(r#"my_crate = "1.1.0""#));
     }
 
-    #[test]
-    fn test_has_non_readme_version_changes_true() {
+    #[tokio::test]
+    async fn test_has_non_readme_version_changes_true() {
         let head = "# Readme\nmy-crate = \"0.1.0\"\n";
         let working = "# Updated Readme\nmy-crate = \"0.2.0\"\n";
 
@@ -659,8 +659,8 @@ my-crate = "0.2.0"
         ));
     }
 
-    #[test]
-    fn test_has_non_readme_version_changes_false() {
+    #[tokio::test]
+    async fn test_has_non_readme_version_changes_false() {
         let head = "# Readme\nmy-crate = \"0.1.0\"\n";
         let working = "# Readme\nmy-crate = \"0.2.0\"\n";
 
@@ -671,8 +671,8 @@ my-crate = "0.2.0"
 
     // Cargo.lock selective staging tests
 
-    #[test]
-    fn test_apply_cargo_lock_version_hunks_only_our_crate() {
+    #[tokio::test]
+    async fn test_apply_cargo_lock_version_hunks_only_our_crate() {
         let head = r#"[[package]]
 name = "my-crate"
 version = "0.1.0"
@@ -697,8 +697,8 @@ version = "1.0.0"
         assert!(!staged.contains(r#"version = "0.1.0""#));
     }
 
-    #[test]
-    fn test_apply_cargo_lock_version_hunks_for_all_workspace_members() {
+    #[tokio::test]
+    async fn test_apply_cargo_lock_version_hunks_for_all_workspace_members() {
         let head = r#"[[package]]
 name = "workspace-root"
 version = "0.20.1"
@@ -742,8 +742,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
         assert!(!staged.contains("name = \"registry-dependency\"\nversion = \"2.0.0\""));
     }
 
-    #[test]
-    fn test_apply_cargo_lock_version_hunks_mixed_changes() {
+    #[tokio::test]
+    async fn test_apply_cargo_lock_version_hunks_mixed_changes() {
         let head = r#"[[package]]
 name = "my-crate"
 version = "0.1.0"
@@ -784,8 +784,8 @@ version = "2.0.0"
         );
     }
 
-    #[test]
-    fn test_apply_cargo_lock_version_hunks_stale_head_version() {
+    #[tokio::test]
+    async fn test_apply_cargo_lock_version_hunks_stale_head_version() {
         // Regression: HEAD's recorded version (0.0.15) is older than the
         // bump command's `old_version` (0.0.16). The structural splice
         // must replace the entire block, not just lines matching the
@@ -821,8 +821,8 @@ version = "1.0.0"
         assert!(!staged.contains(r#"version = "0.0.16""#));
     }
 
-    #[test]
-    fn test_has_non_cargo_lock_version_changes_true() {
+    #[tokio::test]
+    async fn test_has_non_cargo_lock_version_changes_true() {
         let head = r#"[[package]]
 name = "my-crate"
 version = "0.1.0"
@@ -845,8 +845,8 @@ version = "2.0.0"
         ));
     }
 
-    #[test]
-    fn test_has_non_cargo_lock_version_changes_false() {
+    #[tokio::test]
+    async fn test_has_non_cargo_lock_version_changes_false() {
         let head = r#"[[package]]
 name = "my-crate"
 version = "0.1.0"

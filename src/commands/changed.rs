@@ -25,6 +25,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::write_bytes;
 use cargo_plugin_utils::common::get_package_version_from_manifest;
 use clap::Parser;
 
@@ -86,10 +87,11 @@ pub struct ChangedArgs {
 ///     changed,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = ChangedArgs::parse_from(&["cargo", "version-info", "changed"]);
-/// changed(args)?; // Prints "true" or "false"
+/// changed(args).await?; // Prints "true" or "false"
 ///
 /// # Ok(())
 /// # }
@@ -128,7 +130,7 @@ pub struct ChangedArgs {
 /// version=0.1.1
 /// latest_tag_version=0.1.0
 /// ```
-pub fn changed(args: ChangedArgs) -> Result<()> {
+pub async fn changed(args: ChangedArgs) -> Result<()> {
     // Suppress progress when outputting to stdout (bool/json formats)
     let mut logger = cargo_plugin_utils::logger::Logger::new();
 
@@ -211,7 +213,8 @@ pub fn changed(args: ChangedArgs) -> Result<()> {
                 "changed={}\nversion={}\nlatest_tag_version={}\n",
                 changed, cargo_version, latest_tag_version
             );
-            std::fs::write(output_file, output)
+            write_bytes(output_file, output.as_bytes())
+                .await
                 .with_context(|| format!("Failed to write to {}", output_file))?;
         }
         _ => anyhow::bail!("Invalid format: {}", args.format),
@@ -222,26 +225,29 @@ pub fn changed(args: ChangedArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::NamedTempFile;
-
     use super::*;
 
-    fn create_temp_cargo_project(content: &str) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_temp_cargo_project(content: &str) -> async_fs_io::TempDir {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let manifest_path = dir.path().join("Cargo.toml");
-        std::fs::write(&manifest_path, content).unwrap();
+        async_fs_io::write_bytes(&manifest_path, content.as_bytes())
+            .await
+            .unwrap();
         dir
     }
 
-    #[test]
-    fn test_changed_bool_format() {
+    #[tokio::test]
+    async fn test_changed_bool_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "0.1.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
@@ -250,18 +256,19 @@ version = "0.1.0"
             github_output: None,
         };
         // Will succeed if git repo exists, otherwise may fail on git describe
-        let _ = changed(args);
+        let _ = changed(args).await;
     }
 
-    #[test]
-    fn test_changed_json_format() {
+    #[tokio::test]
+    async fn test_changed_json_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "1.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
@@ -269,18 +276,19 @@ version = "1.0.0"
             format: "json".to_string(),
             github_output: None,
         };
-        let _ = changed(args);
+        let _ = changed(args).await;
     }
 
-    #[test]
-    fn test_changed_diff_format() {
+    #[tokio::test]
+    async fn test_changed_diff_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "2.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
@@ -288,45 +296,51 @@ version = "2.0.0"
             format: "diff".to_string(),
             github_output: None,
         };
-        let _ = changed(args);
+        let _ = changed(args).await;
     }
 
-    #[test]
-    fn test_changed_github_actions_format() {
+    #[tokio::test]
+    async fn test_changed_github_actions_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "3.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
-        let output_file = NamedTempFile::new().unwrap();
+        let output_file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
             repo_path: ".".into(),
             format: "github-actions".to_string(),
             github_output: Some(output_file.path().to_string_lossy().to_string()),
         };
-        let result = changed(args);
+        let result = changed(args).await;
         // May succeed or fail depending on git state, but if it succeeds, check output
         if result.is_ok() {
-            let content = std::fs::read_to_string(output_file.path()).unwrap();
+            let content = async_fs_io::read_string_bounded(output_file.path(), 1024 * 1024)
+                .await
+                .unwrap();
             assert!(content.contains("changed="));
             assert!(content.contains("version="));
             assert!(content.contains("latest_tag_version="));
         }
     }
 
-    #[test]
-    fn test_changed_invalid_format() {
+    #[tokio::test]
+    async fn test_changed_invalid_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "1.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
@@ -334,28 +348,29 @@ version = "1.0.0"
             format: "invalid".to_string(),
             github_output: None,
         };
-        assert!(changed(args).is_err());
+        assert!(changed(args).await.is_err());
     }
 
-    #[test]
-    fn test_changed_file_not_found() {
+    #[tokio::test]
+    async fn test_changed_file_not_found() {
         let args = ChangedArgs {
             manifest_path: Some("/nonexistent/Cargo.toml".into()),
             repo_path: ".".into(),
             format: "bool".to_string(),
             github_output: None,
         };
-        assert!(changed(args).is_err());
+        assert!(changed(args).await.is_err());
     }
 
-    #[test]
-    fn test_changed_no_version() {
+    #[tokio::test]
+    async fn test_changed_no_version() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
@@ -363,17 +378,18 @@ name = "test"
             format: "bool".to_string(),
             github_output: None,
         };
-        assert!(changed(args).is_err());
+        assert!(changed(args).await.is_err());
     }
 
-    #[test]
-    fn test_changed_workspace_version() {
+    #[tokio::test]
+    async fn test_changed_workspace_version() {
         let _dir = create_temp_cargo_project(
             r#"
 [workspace.package]
 version = "0.5.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = ChangedArgs {
             manifest_path: Some(manifest_path),
@@ -381,6 +397,6 @@ version = "0.5.0"
             format: "bool".to_string(),
             github_output: None,
         };
-        let _ = changed(args);
+        let _ = changed(args).await;
     }
 }

@@ -126,7 +126,7 @@ impl VersionInfoConfig {
 /// ```rust,no_run
 /// # use std::path::Path;
 /// # use anyhow::Result;
-/// # fn example() -> Result<()> {
+/// # async fn example() -> Result<()> {
 /// use cargo_version_info::commands::bump::hooks::run_hook;
 ///
 /// run_hook(
@@ -168,51 +168,56 @@ pub fn run_hook(command: &str, version: &str, working_dir: &Path) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
-    use tempfile::TempDir;
-
     use super::*;
 
-    #[test]
+    #[tokio::test]
     #[cfg(unix)]
-    fn test_run_hook_success() {
-        let dir = TempDir::new().unwrap();
+    async fn test_run_hook_success() {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         run_hook("true", "1.0.0", dir.path()).unwrap();
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(unix)]
-    fn test_run_hook_failure() {
-        let dir = TempDir::new().unwrap();
+    async fn test_run_hook_failure() {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let result = run_hook("false", "1.0.0", dir.path());
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("exit code"));
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(unix)]
-    fn test_run_hook_version_substitution() {
-        let dir = TempDir::new().unwrap();
+    async fn test_run_hook_version_substitution() {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let output_file = dir.path().join("version.txt");
 
         // Create a hook that writes the version to a file
         let command = format!("echo '{{{{version}}}}' > {}", output_file.display());
         run_hook(&command, "2.3.4", dir.path()).unwrap();
 
-        let content = std::fs::read_to_string(&output_file).unwrap();
+        let content = async_fs_io::read_string_bounded(&output_file, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         assert_eq!(content.trim(), "2.3.4");
     }
 
-    #[test]
-    fn test_version_info_config_default() {
+    #[tokio::test]
+    async fn test_version_info_config_default() {
         let config = VersionInfoConfig::default();
         assert!(config.pre_bump_hooks.is_empty());
         assert!(config.post_bump_hooks.is_empty());
         assert!(config.additional_files.is_empty());
     }
 
-    #[test]
-    fn test_version_info_config_deserialize() {
+    #[tokio::test]
+    async fn test_version_info_config_deserialize() {
         let json = serde_json::json!({
             "pre_bump_hooks": ["./scripts/pre.sh {{version}}"],
             "post_bump_hooks": ["./scripts/post.sh"],
@@ -226,8 +231,8 @@ mod tests {
         assert!(config.pre_bump_hooks[0].contains("{{version}}"));
     }
 
-    #[test]
-    fn test_version_info_config_partial() {
+    #[tokio::test]
+    async fn test_version_info_config_partial() {
         // Test that missing fields default to empty
         let json = serde_json::json!({
             "pre_bump_hooks": ["./scripts/pre.sh"]

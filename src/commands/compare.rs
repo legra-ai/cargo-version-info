@@ -63,10 +63,11 @@ pub struct CompareArgs {
 ///     compare,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = CompareArgs::parse_from(&["cargo", "version-info", "compare", "0.2.0", "0.1.0"]);
-/// compare(args)?; // Prints "true"
+/// compare(args).await?; // Prints "true"
 ///
 /// # Ok(())
 /// # }
@@ -118,7 +119,7 @@ pub struct CompareArgs {
 /// ```text
 /// 0.1.0 == 0.1.0
 /// ```
-pub fn compare(args: CompareArgs) -> Result<()> {
+pub async fn compare(args: CompareArgs) -> Result<()> {
     let comparison = compare_versions(&args.version1, &args.version2)?;
 
     match args.format.as_str() {
@@ -158,123 +159,123 @@ pub fn compare(args: CompareArgs) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_compare_version1_greater() {
+    #[tokio::test]
+    async fn test_compare_version1_greater() {
         let args = CompareArgs {
             version1: "0.2.0".to_string(),
             version2: "0.1.0".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_version1_less() {
+    #[tokio::test]
+    async fn test_compare_version1_less() {
         let args = CompareArgs {
             version1: "0.1.0".to_string(),
             version2: "0.2.0".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_versions_equal() {
+    #[tokio::test]
+    async fn test_compare_versions_equal() {
         let args = CompareArgs {
             version1: "0.1.0".to_string(),
             version2: "0.1.0".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_json_format() {
+    #[tokio::test]
+    async fn test_compare_json_format() {
         let args = CompareArgs {
             version1: "1.0.0".to_string(),
             version2: "0.9.0".to_string(),
             format: "json".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_diff_format() {
+    #[tokio::test]
+    async fn test_compare_diff_format() {
         let args = CompareArgs {
             version1: "2.0.0".to_string(),
             version2: "1.0.0".to_string(),
             format: "diff".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_with_v_prefix() {
+    #[tokio::test]
+    async fn test_compare_with_v_prefix() {
         let args = CompareArgs {
             version1: "v0.2.0".to_string(),
             version2: "v0.1.0".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_invalid_version1() {
+    #[tokio::test]
+    async fn test_compare_invalid_version1() {
         let args = CompareArgs {
             version1: "invalid".to_string(),
             version2: "0.1.0".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_err());
+        assert!(compare(args).await.is_err());
     }
 
-    #[test]
-    fn test_compare_invalid_version2() {
+    #[tokio::test]
+    async fn test_compare_invalid_version2() {
         let args = CompareArgs {
             version1: "0.1.0".to_string(),
             version2: "invalid".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_err());
+        assert!(compare(args).await.is_err());
     }
 
-    #[test]
-    fn test_compare_invalid_format() {
+    #[tokio::test]
+    async fn test_compare_invalid_format() {
         let args = CompareArgs {
             version1: "0.1.0".to_string(),
             version2: "0.2.0".to_string(),
             format: "invalid".to_string(),
         };
-        assert!(compare(args).is_err());
+        assert!(compare(args).await.is_err());
     }
 
-    #[test]
-    fn test_compare_major_difference() {
+    #[tokio::test]
+    async fn test_compare_major_difference() {
         let args = CompareArgs {
             version1: "2.0.0".to_string(),
             version2: "1.9.9".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_minor_difference() {
+    #[tokio::test]
+    async fn test_compare_minor_difference() {
         let args = CompareArgs {
             version1: "1.2.0".to_string(),
             version2: "1.1.9".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 
-    #[test]
-    fn test_compare_patch_difference() {
+    #[tokio::test]
+    async fn test_compare_patch_difference() {
         let args = CompareArgs {
             version1: "1.1.2".to_string(),
             version2: "1.1.1".to_string(),
             format: "bool".to_string(),
         };
-        assert!(compare(args).is_ok());
+        assert!(compare(args).await.is_ok());
     }
 }

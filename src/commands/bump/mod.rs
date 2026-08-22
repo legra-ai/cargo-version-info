@@ -130,6 +130,11 @@ use anyhow::{
     Result,
 };
 pub use args::BumpArgs;
+use async_fs_io::{
+    read_string_bounded,
+    try_exists,
+    write_bytes,
+};
 use cargo_plugin_utils::common::{
     find_package,
     get_owner_repo,
@@ -197,12 +202,13 @@ use crate::version::{
 /// };
 /// use clap::Parser;
 ///
-/// # fn main() -> anyhow::Result<()> {
+/// # #[tokio::main]
+/// # async fn main() -> anyhow::Result<()> {
 /// // Parse command-line arguments
 /// let args = BumpArgs::parse_from(&["cargo", "version-info", "bump", "--patch"]);
 ///
 /// // Execute the bump
-/// bump(args)?;
+/// bump(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -241,7 +247,7 @@ use crate::version::{
 /// - You want to review changes first
 /// - You're making multiple related changes
 /// - You prefer manual commit control
-pub fn bump(args: BumpArgs) -> Result<()> {
+pub async fn bump(args: BumpArgs) -> Result<()> {
     use commit::{
         AdditionalFile,
         FileType,
@@ -261,7 +267,7 @@ pub fn bump(args: BumpArgs) -> Result<()> {
 
     // Step 2: Calculate target version based on command args
     logger.status("Calculating", "target version");
-    let target_version = calculate_target_version(&args, &current_version)?;
+    let target_version = calculate_target_version(&args, &current_version).await?;
     logger.finish();
 
     // Step 3: Verify version is changing
@@ -283,7 +289,8 @@ pub fn bump(args: BumpArgs) -> Result<()> {
         .manifest_path
         .as_deref()
         .unwrap_or_else(|| std::path::Path::new("./Cargo.toml"));
-    version_update::update_cargo_toml_version(manifest_path, &current_version, &target_version)?;
+    version_update::update_cargo_toml_version(manifest_path, &current_version, &target_version)
+        .await?;
     logger.finish();
 
     // Get the directory containing Cargo.toml for other files
@@ -291,10 +298,21 @@ pub fn bump(args: BumpArgs) -> Result<()> {
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
 
-    // Step 5: Update Cargo.lock (unless --no-lock)
+    // Step 5: Run pre-bump hooks
+    //
+    // Hooks run after Cargo.toml version update and before other derived files
+    // are generated (Cargo.lock, README.md). This allows hooks to update
+    // workspace metadata that influences lockfile resolution.
+    for hook in &hook_config.pre_bump_hooks {
+        logger.status("Running", &format!("hook: {}", hook));
+        hooks::run_hook(hook, &target_version, manifest_dir)?;
+        logger.finish();
+    }
+
+    // Step 6: Update Cargo.lock (unless --no-lock)
     // First, capture the HEAD content of Cargo.lock for selective staging
     let cargo_lock_path = manifest_dir.join("Cargo.lock");
-    let cargo_lock_head_content = if !args.no_lock && cargo_lock_path.exists() {
+    let cargo_lock_head_content = if !args.no_lock && try_exists(&cargo_lock_path).await? {
         // Read HEAD content using gix
         get_file_head_content(manifest_path, &cargo_lock_path).ok()
     } else {
@@ -315,10 +333,10 @@ pub fn bump(args: BumpArgs) -> Result<()> {
         logger.finish();
     }
 
-    // Step 6: Update README.md (unless --no-readme)
+    // Step 7: Update README.md (unless --no-readme)
     // First, capture HEAD content for selective staging
     let readme_path = manifest_dir.join("README.md");
-    let readme_head_content = if !args.no_readme && readme_path.exists() {
+    let readme_head_content = if !args.no_readme && try_exists(&readme_path).await? {
         get_file_head_content(manifest_path, &readme_path).ok()
     } else {
         None
@@ -331,14 +349,16 @@ pub fn bump(args: BumpArgs) -> Result<()> {
             &package_name,
             &current_version,
             &target_version,
-        )?;
+        )
+        .await?;
         logger.finish();
 
         if let Some(ref update) = result
             && update.modified
         {
             // Write the updated README
-            std::fs::write(&readme_path, &update.content)
+            write_bytes(&readme_path, update.content.as_bytes())
+                .await
                 .with_context(|| format!("Failed to write {}", readme_path.display()))?;
             logger.print_message("  Updated version in README.md");
         }
@@ -346,15 +366,6 @@ pub fn bump(args: BumpArgs) -> Result<()> {
     } else {
         None
     };
-
-    // Step 7: Run pre-bump hooks
-    // These hooks run after all file updates but before commit, allowing them to
-    // modify additional files that will be included in the commit
-    for hook in &hook_config.pre_bump_hooks {
-        logger.status("Running", &format!("hook: {}", hook));
-        hooks::run_hook(hook, &target_version, manifest_dir)?;
-        logger.finish();
-    }
 
     // Step 8: Commit changes (unless --no-commit)
     if !args.no_commit {
@@ -365,8 +376,9 @@ pub fn bump(args: BumpArgs) -> Result<()> {
         let mut additional_files: Vec<AdditionalFile> = Vec::new();
 
         // Include Cargo.lock if it was updated
-        if !args.no_lock && cargo_lock_path.exists() {
-            let cargo_lock_content = std::fs::read_to_string(&cargo_lock_path)
+        if !args.no_lock && try_exists(&cargo_lock_path).await? {
+            let cargo_lock_content = read_string_bounded(&cargo_lock_path, 64 * 1024 * 1024)
+                .await
                 .with_context(|| format!("Failed to read {}", cargo_lock_path.display()))?;
             additional_files.push(AdditionalFile {
                 path: cargo_lock_path,
@@ -391,8 +403,9 @@ pub fn bump(args: BumpArgs) -> Result<()> {
         // Include additional files from hook configuration
         for file_path in &hook_config.additional_files {
             let path = manifest_dir.join(file_path);
-            if path.exists() {
-                let content = std::fs::read_to_string(&path)
+            if try_exists(&path).await? {
+                let content = read_string_bounded(&path, 16 * 1024 * 1024)
+                    .await
                     .with_context(|| format!("Failed to read {}", path.display()))?;
                 let head_content = get_file_head_content(manifest_path, &path).ok();
                 additional_files.push(AdditionalFile {
@@ -416,7 +429,8 @@ pub fn bump(args: BumpArgs) -> Result<()> {
             &current_version,
             &target_version,
             &additional_files,
-        )?;
+        )
+        .await?;
         logger.finish();
 
         let file_count = additional_files.len() + 1; // +1 for Cargo.toml
@@ -467,7 +481,7 @@ pub fn bump(args: BumpArgs) -> Result<()> {
 /// - GitHub API query fails (in auto mode)
 /// - Version parsing fails
 /// - Network requests fail
-fn calculate_target_version(args: &BumpArgs, current_version: &str) -> Result<String> {
+async fn calculate_target_version(args: &BumpArgs, current_version: &str) -> Result<String> {
     if let Some(version) = &args.version {
         // Manual version specified
         Ok(version.trim().to_string())
@@ -475,9 +489,7 @@ fn calculate_target_version(args: &BumpArgs, current_version: &str) -> Result<St
         // Auto-suggest from GitHub releases
         let (owner, repo) = get_owner_repo(args.owner.clone(), args.repo.clone())?;
         let github_token = args.github_token.as_deref();
-        let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-        let (_latest, next) =
-            rt.block_on(github::calculate_next_version(&owner, &repo, github_token))?;
+        let (_latest, next) = github::calculate_next_version(&owner, &repo, github_token).await?;
         Ok(next)
     } else {
         // Semantic version increment

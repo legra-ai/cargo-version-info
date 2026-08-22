@@ -22,6 +22,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::read_string_bounded;
 use regex::Regex;
 
 /// Result of updating README version references.
@@ -117,17 +118,18 @@ pub fn update_readme_content(
 ///
 /// Returns `Ok(Some(ReadmeUpdateResult))` if the file exists and was processed,
 /// `Ok(None)` if the file doesn't exist, or an error if reading failed.
-pub fn update_readme_file(
+pub async fn update_readme_file(
     readme_path: &Path,
     package_name: &str,
     old_version: &str,
     new_version: &str,
 ) -> Result<Option<ReadmeUpdateResult>> {
-    if !readme_path.exists() {
+    if !async_fs_io::try_exists(readme_path).await? {
         return Ok(None);
     }
 
-    let content = std::fs::read_to_string(readme_path)
+    let content = read_string_bounded(readme_path, 16 * 1024 * 1024)
+        .await
         .with_context(|| format!("Failed to read {}", readme_path.display()))?;
 
     let result = update_readme_content(&content, package_name, old_version, new_version);
@@ -138,8 +140,8 @@ pub fn update_readme_file(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_update_simple_version() {
+    #[tokio::test]
+    async fn test_update_simple_version() {
         let content = r#"
 Add to your Cargo.toml:
 
@@ -155,8 +157,8 @@ my-crate = "0.1.0"
         assert!(!result.content.contains(r#"my-crate = "0.1.0""#));
     }
 
-    #[test]
-    fn test_update_underscored_name() {
+    #[tokio::test]
+    async fn test_update_underscored_name() {
         let content = r#"my_crate = "1.0.0""#;
 
         let result = update_readme_content(content, "my-crate", "1.0.0", "1.1.0");
@@ -164,8 +166,8 @@ my-crate = "0.1.0"
         assert!(result.content.contains(r#"my_crate = "1.1.0""#));
     }
 
-    #[test]
-    fn test_no_match_different_version() {
+    #[tokio::test]
+    async fn test_no_match_different_version() {
         let content = r#"my-crate = "0.1.0""#;
 
         let result = update_readme_content(content, "my-crate", "0.2.0", "0.3.0");
@@ -173,16 +175,16 @@ my-crate = "0.1.0"
         assert!(result.content.contains(r#"my-crate = "0.1.0""#));
     }
 
-    #[test]
-    fn test_no_match_different_crate() {
+    #[tokio::test]
+    async fn test_no_match_different_crate() {
         let content = r#"other-crate = "0.1.0""#;
 
         let result = update_readme_content(content, "my-crate", "0.1.0", "0.2.0");
         assert!(!result.modified);
     }
 
-    #[test]
-    fn test_multiple_occurrences() {
+    #[tokio::test]
+    async fn test_multiple_occurrences() {
         let content = r#"
 my-crate = "0.1.0"
 # Also:
@@ -195,8 +197,8 @@ my-crate = "0.1.0"
         assert_eq!(result.content.matches(r#"my-crate = "0.2.0""#).count(), 2);
     }
 
-    #[test]
-    fn test_whitespace_variations() {
+    #[tokio::test]
+    async fn test_whitespace_variations() {
         let content = r#"my-crate="0.1.0""#;
 
         let result = update_readme_content(content, "my-crate", "0.1.0", "0.2.0");

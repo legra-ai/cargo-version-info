@@ -3,6 +3,10 @@
 use std::io::Write;
 
 use anyhow::Result;
+use async_fs_io::{
+    read_string_bounded,
+    try_exists,
+};
 
 /// Show the platform badge.
 pub async fn badge_platform(
@@ -19,24 +23,15 @@ pub async fn badge_platform(
         .unwrap_or_else(|| std::path::Path::new("."));
 
     // Check for platform indicators
-    let has_fly = tokio::fs::metadata(manifest_dir.join("fly.toml"))
-        .await
-        .is_ok()
-        || tokio::fs::metadata(manifest_dir.join(".fly")).await.is_ok()
-        || tokio::fs::metadata(manifest_dir.join("Dockerfile"))
-            .await
-            .is_ok()
-            && tokio::fs::read_to_string(manifest_dir.join("Dockerfile"))
-                .await
-                .map(|content| content.contains("fly.io") || content.contains("flyio"))
-                .unwrap_or(false);
+    let has_fly = try_exists(manifest_dir.join("fly.toml")).await?
+        || try_exists(manifest_dir.join(".fly")).await?
+        || (try_exists(manifest_dir.join("Dockerfile")).await?
+            && read_string_bounded(manifest_dir.join("Dockerfile"), 16 * 1024 * 1024)
+                .await?
+                .contains("fly.io"));
 
-    let has_vercel = tokio::fs::metadata(manifest_dir.join("vercel.json"))
-        .await
-        .is_ok()
-        || tokio::fs::metadata(manifest_dir.join(".vercel"))
-            .await
-            .is_ok();
+    let has_vercel = try_exists(manifest_dir.join("vercel.json")).await?
+        || try_exists(manifest_dir.join(".vercel")).await?;
 
     if has_fly {
         let badge_url = "https://img.shields.io/badge/platform-Fly.io-8A2BE2";

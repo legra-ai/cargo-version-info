@@ -25,6 +25,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::write_bytes;
 use cargo_plugin_utils::common::find_package;
 use clap::Parser;
 
@@ -73,10 +74,11 @@ pub struct CurrentArgs {
 ///     current,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = CurrentArgs::parse_from(&["cargo", "version-info", "current"]);
-/// current(args)?;
+/// current(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -97,7 +99,7 @@ pub struct CurrentArgs {
 /// ```text
 /// version=0.1.2
 /// ```
-pub fn current(args: CurrentArgs) -> Result<()> {
+pub async fn current(args: CurrentArgs) -> Result<()> {
     let mut logger = cargo_plugin_utils::logger::Logger::new();
 
     logger.status("Reading", "package version");
@@ -113,7 +115,8 @@ pub fn current(args: CurrentArgs) -> Result<()> {
         "github-actions" => {
             let output_file = args.github_output.as_deref().unwrap_or("/dev/stdout");
             let output = format!("version={}\n", version);
-            std::fs::write(output_file, output)
+            write_bytes(output_file, output.as_bytes())
+                .await
                 .with_context(|| format!("Failed to write to {}", output_file))?;
         }
         _ => anyhow::bail!("Invalid format: {}", args.format),
@@ -124,30 +127,36 @@ pub fn current(args: CurrentArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::NamedTempFile;
-
     use super::*;
 
-    fn create_temp_cargo_project(content: &str) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_temp_cargo_project(content: &str) -> async_fs_io::TempDir {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let manifest_path = dir.path().join("Cargo.toml");
-        std::fs::write(&manifest_path, content).unwrap();
+        async_fs_io::write_bytes(&manifest_path, content.as_bytes())
+            .await
+            .unwrap();
 
         // Create src directory with a minimal lib.rs for cargo metadata to work
         let src_dir = dir.path().join("src");
-        std::fs::create_dir_all(&src_dir).unwrap();
-        std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+        async_fs_io::ensure_dir(&src_dir).await.unwrap();
+        async_fs_io::write_bytes(src_dir.join("lib.rs"), b"// Test library\n")
+            .await
+            .unwrap();
 
         dir
     }
 
-    #[test]
-    fn test_current_workspace_version() {
-        let _dir = tempfile::tempdir().unwrap();
+    #[tokio::test]
+    async fn test_current_workspace_version() {
+        let _dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
         // Create workspace root Cargo.toml (no [package] section)
-        std::fs::write(
+        async_fs_io::write_bytes(
             _dir.path().join("Cargo.toml"),
-            r#"
+            br#"
 [workspace.package]
 version = "0.1.2"
 
@@ -155,21 +164,27 @@ version = "0.1.2"
 members = ["member1"]
 "#,
         )
+        .await
         .unwrap();
 
         // Create member package
         let member_dir = _dir.path().join("member1");
-        std::fs::create_dir_all(member_dir.join("src")).unwrap();
-        std::fs::write(
+        async_fs_io::ensure_dir(member_dir.join("src"))
+            .await
+            .unwrap();
+        async_fs_io::write_bytes(
             member_dir.join("Cargo.toml"),
-            r#"
+            br#"
 [package]
 name = "member1"
 version.workspace = true
 "#,
         )
+        .await
         .unwrap();
-        std::fs::write(member_dir.join("src").join("lib.rs"), "// Test library\n").unwrap();
+        async_fs_io::write_bytes(member_dir.join("src").join("lib.rs"), b"// Test library\n")
+            .await
+            .unwrap();
 
         // Test from the member package directory (where we'd normally run the command)
         let manifest_path = member_dir.join("Cargo.toml");
@@ -178,25 +193,26 @@ version.workspace = true
             format: "version".to_string(),
             github_output: None,
         };
-        assert!(current(args).is_ok());
+        assert!(current(args).await.is_ok());
     }
 
-    #[test]
-    fn test_current_package_version() {
+    #[tokio::test]
+    async fn test_current_package_version() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "1.2.3"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = CurrentArgs {
             manifest_path: Some(manifest_path.clone()),
             format: "version".to_string(),
             github_output: None,
         };
-        let result = current(args);
+        let result = current(args).await;
         if let Err(e) = &result {
             eprintln!("Error in test_current_package_version: {}", e);
             eprintln!("Manifest path: {:?}", manifest_path);
@@ -204,84 +220,92 @@ version = "1.2.3"
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_current_json_format() {
+    #[tokio::test]
+    async fn test_current_json_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "0.5.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = CurrentArgs {
             manifest_path: Some(manifest_path),
             format: "json".to_string(),
             github_output: None,
         };
-        assert!(current(args).is_ok());
+        assert!(current(args).await.is_ok());
     }
 
-    #[test]
-    fn test_current_github_actions_format() {
+    #[tokio::test]
+    async fn test_current_github_actions_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
 version = "2.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
-        let output_file = NamedTempFile::new().unwrap();
+        let output_file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let args = CurrentArgs {
             manifest_path: Some(manifest_path),
             format: "github-actions".to_string(),
             github_output: Some(output_file.path().to_string_lossy().to_string()),
         };
-        assert!(current(args).is_ok());
+        assert!(current(args).await.is_ok());
 
-        let content = std::fs::read_to_string(output_file.path()).unwrap();
+        let content = async_fs_io::read_string_bounded(output_file.path(), 1024 * 1024)
+            .await
+            .unwrap();
         assert!(content.contains("version=2.0.0"));
     }
 
-    #[test]
-    fn test_current_invalid_format() {
+    #[tokio::test]
+    async fn test_current_invalid_format() {
         let _dir = create_temp_cargo_project(
             r#"
 [package]
 name = "test"
-version = "1.0.0"
+        version = "1.0.0"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = CurrentArgs {
             manifest_path: Some(manifest_path),
             format: "invalid".to_string(),
             github_output: None,
         };
-        assert!(current(args).is_err());
+        assert!(current(args).await.is_err());
     }
 
-    #[test]
-    fn test_current_file_not_found() {
+    #[tokio::test]
+    async fn test_current_file_not_found() {
         let args = CurrentArgs {
             manifest_path: Some("/nonexistent/Cargo.toml".into()),
             format: "version".to_string(),
             github_output: None,
         };
-        assert!(current(args).is_err());
+        assert!(current(args).await.is_err());
     }
 
-    #[test]
-    fn test_current_no_version() {
+    #[tokio::test]
+    async fn test_current_no_version() {
         // Cargo defaults to "0.0.0" when no version is specified, so this should
         // succeed
         let _dir = create_temp_cargo_project(
             r#"
 [package]
-name = "test"
+        name = "test"
 "#,
-        );
+        )
+        .await;
         let manifest_path = _dir.path().join("Cargo.toml");
         let args = CurrentArgs {
             manifest_path: Some(manifest_path),
@@ -289,7 +313,7 @@ name = "test"
             github_output: None,
         };
         // Cargo defaults to 0.0.0, so this should succeed
-        let result = current(args);
+        let result = current(args).await;
         assert!(result.is_ok());
         // Verify it returns the default version
         // (We can't easily capture stdout in this test, but the function should

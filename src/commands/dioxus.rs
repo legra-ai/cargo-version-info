@@ -23,6 +23,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::read_string_bounded;
 use clap::Parser;
 
 /// Arguments for the `dioxus` command.
@@ -65,10 +66,11 @@ pub struct DioxusArgs {
 ///     dioxus,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = DioxusArgs::parse_from(&["cargo", "version-info", "dioxus"]);
-/// dioxus(args)?;
+/// dioxus(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -84,8 +86,9 @@ pub struct DioxusArgs {
 /// ```json
 /// {"version":"0.7.0"}
 /// ```
-pub fn dioxus(args: DioxusArgs) -> Result<()> {
-    let content = std::fs::read_to_string(&args.manifest)
+pub async fn dioxus(args: DioxusArgs) -> Result<()> {
+    let content = read_string_bounded(&args.manifest, 16 * 1024 * 1024)
+        .await
         .with_context(|| format!("Failed to read {}", args.manifest.display()))?;
 
     // Parse dioxus = { version = "..." } or dioxus = { workspace = true }
@@ -124,35 +127,36 @@ pub fn dioxus(args: DioxusArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
-    use tempfile::NamedTempFile;
-
     use super::*;
 
-    fn create_temp_manifest(content: &str) -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+    async fn create_temp_manifest(content: &str) -> async_fs_io::TempFile {
+        let file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
+        async_fs_io::write_bytes(file.path(), content.as_bytes())
+            .await
+            .unwrap();
         file
     }
 
-    #[test]
-    fn test_dioxus_direct_version() {
+    #[tokio::test]
+    async fn test_dioxus_direct_version() {
         let manifest = create_temp_manifest(
             r#"
 [dependencies]
 dioxus = { version = "0.7.0" }
 "#,
-        );
+        )
+        .await;
         let args = DioxusArgs {
             manifest: manifest.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(dioxus(args).is_ok());
+        assert!(dioxus(args).await.is_ok());
     }
 
-    #[test]
-    fn test_dioxus_workspace_inheritance() {
+    #[tokio::test]
+    async fn test_dioxus_workspace_inheritance() {
         let manifest = create_temp_manifest(
             r#"
 [workspace.package]
@@ -161,79 +165,84 @@ version = "0.8.0"
 [dependencies]
 dioxus = { workspace = true }
 "#,
-        );
+        )
+        .await;
         let args = DioxusArgs {
             manifest: manifest.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(dioxus(args).is_ok());
+        assert!(dioxus(args).await.is_ok());
     }
 
-    #[test]
-    fn test_dioxus_json_format() {
+    #[tokio::test]
+    async fn test_dioxus_json_format() {
         let manifest = create_temp_manifest(
             r#"
 [dependencies]
 dioxus = { version = "0.9.0" }
 "#,
-        );
+        )
+        .await;
         let args = DioxusArgs {
             manifest: manifest.path().to_path_buf(),
             format: "json".to_string(),
         };
-        assert!(dioxus(args).is_ok());
+        assert!(dioxus(args).await.is_ok());
     }
 
-    #[test]
-    fn test_dioxus_not_found() {
+    #[tokio::test]
+    async fn test_dioxus_not_found() {
         let manifest = create_temp_manifest(
             r#"
 [dependencies]
 serde = { version = "1.0" }
 "#,
-        );
+        )
+        .await;
         let args = DioxusArgs {
             manifest: manifest.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(dioxus(args).is_err());
+        assert!(dioxus(args).await.is_err());
     }
 
-    #[test]
-    fn test_dioxus_file_not_found() {
+    #[tokio::test]
+    async fn test_dioxus_file_not_found() {
         let args = DioxusArgs {
             manifest: "/nonexistent/Cargo.toml".into(),
             format: "version".to_string(),
         };
-        assert!(dioxus(args).is_err());
+        assert!(dioxus(args).await.is_err());
     }
 
-    #[test]
-    fn test_dioxus_invalid_format() {
+    #[tokio::test]
+    async fn test_dioxus_invalid_format() {
         let manifest = create_temp_manifest(
             r#"
 [dependencies]
 dioxus = { version = "0.7.0" }
 "#,
-        );
+        )
+        .await;
         let args = DioxusArgs {
             manifest: manifest.path().to_path_buf(),
             format: "invalid".to_string(),
         };
-        assert!(dioxus(args).is_err());
+        assert!(dioxus(args).await.is_err());
     }
 
-    #[test]
-    fn test_dioxus_invalid_toml() {
+    #[tokio::test]
+    async fn test_dioxus_invalid_toml() {
         let manifest = create_temp_manifest(
             r#"
 [invalid toml content
 "#,
-        );
+        )
+        .await;
         let args = DioxusArgs {
             manifest: manifest.path().to_path_buf(),
             format: "version".to_string(),
         };
-        assert!(dioxus(args).is_err());
+        assert!(dioxus(args).await.is_err());
     }
 }
