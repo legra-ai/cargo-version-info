@@ -910,9 +910,9 @@ checksum = "c2db04e74f0a9a93103b50e90b96024c9b2bdca8bce6a632ec71b88736d3d359"
 
 [[package]]
 name = "dotenvage"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bafbcb693dcf0b1f7e6fe3c1c191fd9b52b922896c65c85902a2320438fc6cba"
+checksum = "1575b4519db173d85ef15fea580c27050403495c04751176a4daeb1e109be646"
 dependencies = [
  "age",
  "anyhow",

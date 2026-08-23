@@ -42,7 +42,7 @@ clap = { version = "4.6.6", default-features = false, features = [
     "env",
     "std",
 ] }
-dotenvage = "0.7.3"
+dotenvage = "0.8.0"
 gix = { version = "0.86.0", default-features = false, features = [
     "revision",
     "worktree-mutation",
