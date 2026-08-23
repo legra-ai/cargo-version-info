@@ -30,13 +30,15 @@ fn main() {
         .enable_all()
         .build()
         .expect("failed to create build-script runtime");
-    let version = runtime.block_on(compute_version_string(".")).unwrap_or_else(|e| {
-        eprintln!(
-            "cargo:warning=Version computation failed: {}, using fallback",
-            e
-        );
-        "0.0.0-dev-unknown".to_string()
-    });
+    let version = runtime
+        .block_on(compute_version_string("."))
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "cargo:warning=Version computation failed: {}, using fallback",
+                e
+            );
+            "0.0.0-dev-unknown".to_string()
+        });
 
     println!("cargo:rustc-env=CARGO_PKG_VERSION={}", version);
     println!("cargo:rerun-if-changed=.git/HEAD");
