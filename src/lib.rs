@@ -16,8 +16,9 @@
 /// ```no_run
 /// use cargo_version_info::commands::compute_version_string;
 ///
-/// fn main() {
-///     if let Ok(version) = compute_version_string(".") {
+/// #[tokio::main]
+/// async fn main() {
+///     if let Ok(version) = compute_version_string(".").await {
 ///         println!("cargo:rustc-env=CARGO_PKG_VERSION={}", version);
 ///         println!("cargo:rerun-if-changed=.git/HEAD");
 ///         println!("cargo:rerun-if-changed=.git/refs");

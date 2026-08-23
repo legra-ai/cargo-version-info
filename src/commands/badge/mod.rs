@@ -65,6 +65,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::canonicalize;
 use clap::{
     Parser,
     Subcommand,
@@ -119,9 +120,8 @@ pub enum BadgeSubcommand {
 }
 
 /// Generate badges for quality metrics.
-pub fn badge(args: BadgeArgs) -> Result<()> {
-    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-    rt.block_on(badge_async(args))
+pub async fn badge(args: BadgeArgs) -> Result<()> {
+    badge_async(args).await
 }
 
 /// Async entry point for badge generation.
@@ -205,28 +205,17 @@ pub async fn find_package() -> Result<cargo_metadata::Package> {
     // Try to find the package in the current working directory
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
 
-    // Canonicalize current directory and all package directories, then find match
-    let (canonical_current_dir, packages_with_dirs) = tokio::task::spawn_blocking({
-        let packages = metadata.packages.clone();
-        let current = current_dir.clone();
-        move || {
-            let canonical_current_dir = current.canonicalize().ok();
-            let packages_with_dirs: Vec<_> = packages
-                .iter()
-                .filter_map(|pkg| {
-                    // Get the directory containing the manifest (package directory)
-                    pkg.manifest_path
-                        .as_std_path()
-                        .parent()
-                        .and_then(|p| p.canonicalize().ok())
-                        .map(|p| (pkg.clone(), p))
-                })
-                .collect();
-            (canonical_current_dir, packages_with_dirs)
+    // Canonicalize current directory and all package directories, then find match.
+    let canonical_current_dir = canonicalize(&current_dir).await.ok();
+    let mut packages_with_dirs = Vec::new();
+    for package in &metadata.packages {
+        let Some(package_dir) = package.manifest_path.as_std_path().parent() else {
+            continue;
+        };
+        if let Ok(canonical_package_dir) = canonicalize(package_dir).await {
+            packages_with_dirs.push((package.clone(), canonical_package_dir));
         }
-    })
-    .await
-    .context("Failed to spawn blocking task")?;
+    }
 
     // Try to match current directory with a package directory
     if let Some(ref canonical_current) = canonical_current_dir
@@ -240,26 +229,13 @@ pub async fn find_package() -> Result<cargo_metadata::Package> {
     // Also try matching the manifest path directly (for cases where Cargo.toml is
     // in current dir)
     let current_manifest = current_dir.join("Cargo.toml");
-    let (canonical_current_manifest, packages_with_manifests) = tokio::task::spawn_blocking({
-        let packages = metadata.packages.clone();
-        let current = current_manifest.clone();
-        move || {
-            let canonical_current_manifest = current.canonicalize().ok();
-            let packages_with_manifests: Vec<_> = packages
-                .iter()
-                .filter_map(|pkg| {
-                    pkg.manifest_path
-                        .as_std_path()
-                        .canonicalize()
-                        .ok()
-                        .map(|p| (pkg.clone(), p))
-                })
-                .collect();
-            (canonical_current_manifest, packages_with_manifests)
+    let canonical_current_manifest = canonicalize(&current_manifest).await.ok();
+    let mut packages_with_manifests = Vec::new();
+    for package in &metadata.packages {
+        if let Ok(canonical_manifest) = canonicalize(package.manifest_path.as_std_path()).await {
+            packages_with_manifests.push((package.clone(), canonical_manifest));
         }
-    })
-    .await
-    .context("Failed to spawn blocking task")?;
+    }
 
     if let Some(ref canonical) = canonical_current_manifest
         && let Some((pkg, _)) = packages_with_manifests

@@ -6,6 +6,12 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::{
+    DirectoryReader,
+    read_string_bounded,
+    symlink_metadata,
+    try_exists,
+};
 
 /// Heuristically guess if a crate is likely published on crates.io/docs.rs.
 ///
@@ -29,35 +35,29 @@ pub async fn guess_if_published(package: &cargo_metadata::Package) -> Result<boo
     let manifest_dir = manifest_path
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
-    let has_license = tokio::fs::metadata(manifest_dir.join("LICENSE"))
-        .await
-        .is_ok()
-        || tokio::fs::metadata(manifest_dir.join("LICENSE-MIT"))
-            .await
-            .is_ok()
-        || tokio::fs::metadata(manifest_dir.join("LICENSE-APACHE"))
-            .await
-            .is_ok();
+    let has_license = try_exists(manifest_dir.join("LICENSE")).await?
+        || try_exists(manifest_dir.join("LICENSE-MIT")).await?
+        || try_exists(manifest_dir.join("LICENSE-APACHE")).await?;
 
     // Check GitHub workflows for "cargo publish" (relative to manifest directory)
     let workflows_dir = manifest_dir.join(".github/workflows");
-    let has_publish_in_workflows = if tokio::fs::metadata(&workflows_dir).await.is_err() {
+    let has_publish_in_workflows = if !try_exists(&workflows_dir).await? {
         false
     } else {
-        let mut entries = match tokio::fs::read_dir(&workflows_dir).await {
-            Ok(entries) => entries,
-            Err(_) => return Ok(false),
-        };
+        let mut entries = DirectoryReader::open_if_exists(&workflows_dir)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!("workflow directory disappeared while it was being read")
+            })?;
         let mut found = false;
-        while let Some(entry) = entries.next_entry().await? {
+        while let Some(entry) = entries.next().await? {
             let path = entry.path();
             let ext = path.extension();
             if ext != Some("yml".as_ref()) && ext != Some("yaml".as_ref()) {
                 continue;
             }
-            if let Ok(content) = tokio::fs::read_to_string(&path).await
-                && content.contains("cargo publish")
-            {
+            let content = read_string_bounded(path, 16 * 1024 * 1024).await?;
+            if content.contains("cargo publish") {
                 found = true;
                 break;
             }
@@ -96,28 +96,22 @@ pub async fn compute_cache_key(package: &cargo_metadata::Package) -> Result<Stri
 
     // Fall back to Cargo.toml modification time
     let manifest_path = package.manifest_path.as_std_path();
-    let mtime = tokio::task::spawn_blocking({
-        let path = manifest_path.to_path_buf();
-        move || {
-            std::fs::metadata(&path)
-                .ok()
-                .and_then(|meta| meta.modified().ok())
-                .map(|time| {
-                    time.duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                        .to_string()
-                })
-        }
-    })
-    .await
-    .context("Failed to spawn blocking task")?;
+    let mtime = symlink_metadata(manifest_path)
+        .await
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .map(|time| {
+            time.duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                .to_string()
+        });
 
     Ok(mtime.unwrap_or_else(|| "unknown".to_string()))
 }
 
 /// Get cache file path for badge caches.
-pub fn get_badge_cache_path(cache_name: &str) -> Result<PathBuf> {
+pub async fn get_badge_cache_path(cache_name: &str) -> Result<PathBuf> {
     let target_dir = if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
         PathBuf::from(dir)
     } else {
@@ -126,7 +120,7 @@ pub fn get_badge_cache_path(cache_name: &str) -> Result<PathBuf> {
         let mut found = None;
         loop {
             let target = path.join("target");
-            if target.exists() {
+            if try_exists(&target).await? {
                 found = Some(target);
                 break;
             }

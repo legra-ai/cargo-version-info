@@ -10,10 +10,13 @@
 //! Replaces scattered version logic in GitHub Actions, bash scripts, and Rust
 //! code.
 
-use std::fs;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use async_fs_io::{
+    metadata,
+    try_exists,
+};
 use cargo_version_info::commands;
 use cargo_version_info::commands::{
     BadgeArgs,
@@ -145,10 +148,10 @@ enum VersionInfoCommand {
 }
 
 /// Check if any .env* files exist in the current directory.
-fn has_env_files() -> bool {
+async fn has_env_files() -> anyhow::Result<bool> {
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
-        Err(_) => return false,
+        Err(error) => return Err(error.into()),
     };
 
     // Check for common .env* file patterns
@@ -156,8 +159,8 @@ fn has_env_files() -> bool {
 
     for pattern in &patterns {
         let path = current_dir.join(pattern);
-        if path.exists() && fs::metadata(&path).map(|m| m.is_file()).unwrap_or(false) {
-            return true;
+        if try_exists(&path).await? && !metadata(&path).await?.is_directory {
+            return Ok(true);
         }
     }
 
@@ -165,20 +168,21 @@ fn has_env_files() -> bool {
     if let Ok(user) = std::env::var("USER") {
         let user_env = format!(".env.{}", user);
         let path = current_dir.join(user_env);
-        if path.exists() && fs::metadata(&path).map(|m| m.is_file()).unwrap_or(false) {
-            return true;
+        if try_exists(&path).await? && !metadata(&path).await?.is_directory {
+            return Ok(true);
         }
     }
 
-    false
+    Ok(false)
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     // Load environment variables from .env* files using dotenvage
     // This allows cargo-version-info to access encrypted secrets like GITHUB_TOKEN
     // stored in .env.local files protected by dotenvage
     // Only attempt to load if .env* files exist to avoid unnecessary warnings
-    if has_env_files()
+    if has_env_files().await?
         && let Err(e) = dotenvage::EnvLoader::new().and_then(|loader| loader.load())
     {
         eprintln!("Warning: Failed to load/decrypt env files: {}", e);
@@ -188,35 +192,35 @@ fn main() -> Result<()> {
     let args = CargoArgs::parse();
 
     if args.tool_version_flag {
-        return commands::build_version_for_repo(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        return commands::build_version_for_repo(PathBuf::from(env!("CARGO_MANIFEST_DIR"))).await;
     }
 
     if let Some(TopCommand::VersionInfo(cli)) = args.subcmd {
         if cli.version_flag {
-            return commands::build_version_default();
+            return commands::build_version_default().await;
         }
 
         if let Some(command) = cli.command {
             return match command {
-                VersionInfoCommand::Next(args) => commands::next(args),
-                VersionInfoCommand::Current(args) => commands::current(args),
-                VersionInfoCommand::Latest(args) => commands::latest(args),
-                VersionInfoCommand::Dev(args) => commands::dev(args),
-                VersionInfoCommand::Tag(args) => commands::tag(args),
-                VersionInfoCommand::Compare(args) => commands::compare(args),
-                VersionInfoCommand::RustToolchain(args) => commands::rust_toolchain(args),
-                VersionInfoCommand::Dioxus(args) => commands::dioxus(args),
-                VersionInfoCommand::BuildVersion(args) => commands::build_version(args),
-                VersionInfoCommand::Changed(args) => commands::changed(args),
-                VersionInfoCommand::Bump(args) => commands::bump(args),
-                VersionInfoCommand::PreBumpHook(args) => commands::pre_bump_hook(args),
-                VersionInfoCommand::PostBumpHook(args) => commands::post_bump_hook(args),
-                VersionInfoCommand::Changelog(args) => commands::changelog(args),
-                VersionInfoCommand::PrLog(args) => commands::pr_log(args),
-                VersionInfoCommand::ReleasePage(args) => commands::release_page(args),
-                VersionInfoCommand::Badge(args) => commands::badge(args),
-                VersionInfoCommand::UpdateReadme(args) => commands::update_readme(args),
-                VersionInfoCommand::Version => commands::build_version_default(),
+                VersionInfoCommand::Next(args) => commands::next(args).await,
+                VersionInfoCommand::Current(args) => commands::current(args).await,
+                VersionInfoCommand::Latest(args) => commands::latest(args).await,
+                VersionInfoCommand::Dev(args) => commands::dev(args).await,
+                VersionInfoCommand::Tag(args) => commands::tag(args).await,
+                VersionInfoCommand::Compare(args) => commands::compare(args).await,
+                VersionInfoCommand::RustToolchain(args) => commands::rust_toolchain(args).await,
+                VersionInfoCommand::Dioxus(args) => commands::dioxus(args).await,
+                VersionInfoCommand::BuildVersion(args) => commands::build_version(args).await,
+                VersionInfoCommand::Changed(args) => commands::changed(args).await,
+                VersionInfoCommand::Bump(args) => commands::bump(args).await,
+                VersionInfoCommand::PreBumpHook(args) => commands::pre_bump_hook(args).await,
+                VersionInfoCommand::PostBumpHook(args) => commands::post_bump_hook(args).await,
+                VersionInfoCommand::Changelog(args) => commands::changelog(args).await,
+                VersionInfoCommand::PrLog(args) => commands::pr_log(args).await,
+                VersionInfoCommand::ReleasePage(args) => commands::release_page(args).await,
+                VersionInfoCommand::Badge(args) => commands::badge(args).await,
+                VersionInfoCommand::UpdateReadme(args) => commands::update_readme(args).await,
+                VersionInfoCommand::Version => commands::build_version_default().await,
             };
         }
 
@@ -225,14 +229,15 @@ fn main() -> Result<()> {
             .iter()
             .any(|arg| arg == "--version" || arg == "-V")
         {
-            return commands::build_version_default();
+            return commands::build_version_default().await;
         }
         if cli
             .passthrough
             .iter()
             .any(|arg| arg == "--tool-version" || arg == "-T")
         {
-            return commands::build_version_for_repo(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+            return commands::build_version_for_repo(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                .await;
         }
 
         // No inner command: show help

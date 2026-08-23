@@ -25,6 +25,7 @@ use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::write_bytes;
 use clap::Parser;
 
 /// Arguments for the `release-page` command.
@@ -63,9 +64,8 @@ pub struct ReleasePageArgs {
 }
 
 /// Generate a complete release page.
-pub fn release_page(args: ReleasePageArgs) -> Result<()> {
-    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-    rt.block_on(release_page_async(args))
+pub async fn release_page(args: ReleasePageArgs) -> Result<()> {
+    release_page_async(args).await
 }
 
 /// Async entry point for release page generation.
@@ -159,8 +159,9 @@ async fn release_page_async(args: ReleasePageArgs) -> Result<()> {
 
     // Write output to file or stdout
     if let Some(output_path) = args.output {
-        std::fs::write(&output_path, output)
-            .with_context(|| format!("Failed to write release page to {}", output_path))?;
+        write_bytes(&output_path, &output).await.map_err(|error| {
+            anyhow::anyhow!("Failed to write release page to {}: {error}", output_path)
+        })?;
         logger.status("Written", &output_path);
     } else {
         std::io::stdout().write_all(&output)?;
@@ -180,7 +181,7 @@ async fn generate_pr_log(_writer: &mut dyn Write, args: &ReleasePageArgs) -> Res
     };
 
     // Call pr_log - currently returns an error as it's not implemented
-    crate::commands::pr_log(pr_log_args)?;
+    crate::commands::pr_log(pr_log_args).await?;
 
     Ok(())
 }
@@ -231,17 +232,17 @@ fn generate_changelog(writer: &mut dyn Write, args: &ReleasePageArgs) -> Result<
 mod tests {
     use std::process::Command;
 
-    use tempfile::TempDir;
-
     use super::*;
 
-    fn create_test_cargo_project() -> TempDir {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_test_cargo_project() -> async_fs_io::TempDir {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
 
         // Create Cargo.toml
-        std::fs::write(
+        async_fs_io::write_bytes(
             dir.path().join("Cargo.toml"),
-            r#"
+            br#"
 [package]
 name = "test-package"
 version = "1.0.0"
@@ -249,12 +250,15 @@ description = "Test package"
 repository = "https://github.com/test/repo"
 "#,
         )
+        .await
         .unwrap();
 
         // Create src directory with minimal lib.rs
         let src_dir = dir.path().join("src");
-        std::fs::create_dir_all(&src_dir).unwrap();
-        std::fs::write(src_dir.join("lib.rs"), "// Test library\n").unwrap();
+        async_fs_io::ensure_dir(&src_dir).await.unwrap();
+        async_fs_io::write_bytes(src_dir.join("lib.rs"), b"// Test library\n")
+            .await
+            .unwrap();
 
         // Initialize git repo
         Command::new("git")
@@ -276,7 +280,9 @@ repository = "https://github.com/test/repo"
             .unwrap();
 
         // Create initial commit
-        std::fs::write(dir.path().join("README.md"), "# Test\n").unwrap();
+        async_fs_io::write_bytes(dir.path().join("README.md"), b"# Test\n")
+            .await
+            .unwrap();
         Command::new("git")
             .args(["add", "."])
             .current_dir(dir.path())
@@ -296,13 +302,15 @@ repository = "https://github.com/test/repo"
     #[serial_test::serial]
     #[cfg_attr(target_os = "windows", ignore)] // Skip on Windows due to subprocess/directory issues
     async fn test_release_page_with_for_version() {
-        let _dir = create_test_cargo_project();
+        let _dir = create_test_cargo_project().await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
         std::env::set_current_dir(&dir_path).unwrap();
 
-        let output_file = tempfile::NamedTempFile::new().unwrap();
+        let output_file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let output_path = output_file.path().to_string_lossy().to_string();
 
         let args = ReleasePageArgs {
@@ -321,7 +329,9 @@ repository = "https://github.com/test/repo"
         assert!(result.is_ok(), "Release page generation should succeed");
 
         // Verify the output contains the for_version
-        let content = std::fs::read_to_string(output_path).unwrap();
+        let content = async_fs_io::read_string_bounded(output_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         assert!(
             content.contains("test-package v0.2.0"),
             "Header should include for_version"
@@ -332,13 +342,15 @@ repository = "https://github.com/test/repo"
     #[serial_test::serial]
     #[cfg_attr(target_os = "windows", ignore)] // Skip on Windows due to subprocess/directory issues
     async fn test_release_page_with_for_version_no_v_prefix() {
-        let _dir = create_test_cargo_project();
+        let _dir = create_test_cargo_project().await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
         std::env::set_current_dir(&dir_path).unwrap();
 
-        let output_file = tempfile::NamedTempFile::new().unwrap();
+        let output_file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let output_path = output_file.path().to_string_lossy().to_string();
 
         let args = ReleasePageArgs {
@@ -357,7 +369,9 @@ repository = "https://github.com/test/repo"
         assert!(result.is_ok(), "Release page generation should succeed");
 
         // Verify the output contains the normalized version
-        let content = std::fs::read_to_string(output_path).unwrap();
+        let content = async_fs_io::read_string_bounded(output_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         assert!(
             content.contains("test-package v0.2.0"),
             "Header should normalize version with v prefix"
@@ -368,7 +382,7 @@ repository = "https://github.com/test/repo"
     #[serial_test::serial]
     #[cfg_attr(target_os = "windows", ignore)] // Skip on Windows due to subprocess/directory issues
     async fn test_release_page_without_for_version_uses_package_version() {
-        let _dir = create_test_cargo_project();
+        let _dir = create_test_cargo_project().await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -384,7 +398,9 @@ repository = "https://github.com/test/repo"
             repo: Some("repo".to_string()),
         };
 
-        let output_file = tempfile::NamedTempFile::new().unwrap();
+        let output_file = async_fs_io::TempFile::create(std::env::temp_dir())
+            .await
+            .unwrap();
         let output_path = output_file.path().to_string_lossy().to_string();
 
         let mut args_with_output = args;
@@ -396,7 +412,9 @@ repository = "https://github.com/test/repo"
         assert!(result.is_ok(), "Release page generation should succeed");
 
         // Verify the output uses package version from Cargo.toml
-        let content = std::fs::read_to_string(output_path).unwrap();
+        let content = async_fs_io::read_string_bounded(output_path, 64 * 1024 * 1024)
+            .await
+            .unwrap();
         assert!(
             content.contains("test-package v1.0.0"),
             "Header should use package version from Cargo.toml when for_version not specified"

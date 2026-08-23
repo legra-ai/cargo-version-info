@@ -27,16 +27,14 @@
 //! BUILD_VERSION=1.2.3 cargo version-info build-version
 //! ```
 
+use std::env;
 use std::path::PathBuf;
-use std::{
-    env,
-    fs,
-};
 
 use anyhow::{
     Context,
     Result,
 };
+use async_fs_io::read_string_bounded;
 use cargo_plugin_utils::common::get_owner_repo;
 use clap::Parser;
 
@@ -126,10 +124,11 @@ pub struct BuildVersionArgs {
 ///     build_version,
 /// };
 /// use clap::Parser;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Parse from command line args
 /// let args = BuildVersionArgs::parse_from(&["cargo", "version-info", "build-version"]);
-/// build_version(args)?;
+/// build_version(args).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -156,7 +155,7 @@ pub struct BuildVersionArgs {
 /// {"version":"0.0.0-dev-a1b2c3d","sha":"a1b2c3d","source":"git"}
 /// ```
 #[allow(clippy::disallowed_methods)] // CLI tool needs direct env access
-pub fn build_version(args: BuildVersionArgs) -> Result<()> {
+pub async fn build_version(args: BuildVersionArgs) -> Result<()> {
     // Try explicit overrides first (CI workflow should set BUILD_VERSION)
     let env_version = ["BUILD_VERSION", "CARGO_PKG_VERSION_OVERRIDE"]
         .into_iter()
@@ -178,10 +177,7 @@ pub fn build_version(args: BuildVersionArgs) -> Result<()> {
         let (owner, repo) = get_owner_repo(args.owner, args.repo)?;
         let github_token = args.github_token.as_deref();
 
-        let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-        if let Ok((_, next)) =
-            rt.block_on(github::calculate_next_version(&owner, &repo, github_token))
-        {
+        if let Ok((_, next)) = github::calculate_next_version(&owner, &repo, github_token).await {
             match args.format.as_str() {
                 "version" => println!("{}", next),
                 "json" => println!("{{\"version\":\"{}\",\"source\":\"github_api\"}}", next),
@@ -193,7 +189,7 @@ pub fn build_version(args: BuildVersionArgs) -> Result<()> {
 
     // Fall back to manifest version (from Cargo.toml), optionally append SHA if
     // available
-    if let Some(manifest_version) = read_manifest_version(&args.manifest) {
+    if let Some(manifest_version) = read_manifest_version(&args.manifest).await {
         let trimmed = manifest_version.trim();
         if !trimmed.is_empty() && trimmed != "0.0.0" {
             let version_with_sha = short_sha(&args.repo_path)
@@ -242,12 +238,12 @@ pub fn build_version(args: BuildVersionArgs) -> Result<()> {
 
 /// Compute the build version using default arguments (local repo, version
 /// output).
-pub fn build_version_default() -> Result<()> {
-    build_version_for_repo(".")
+pub async fn build_version_default() -> Result<()> {
+    build_version_for_repo(".").await
 }
 
 /// Compute the build version for a specific repository path.
-pub fn build_version_for_repo(repo_path: impl Into<PathBuf>) -> Result<()> {
+pub async fn build_version_for_repo(repo_path: impl Into<PathBuf>) -> Result<()> {
     let repo_root: PathBuf = repo_path.into();
     let manifest = repo_root.join("Cargo.toml");
 
@@ -259,6 +255,7 @@ pub fn build_version_for_repo(repo_path: impl Into<PathBuf>) -> Result<()> {
         repo_path: repo_root,
         format: "version".to_string(),
     })
+    .await
 }
 
 /// Compute the build version string for use in build.rs scripts.
@@ -270,8 +267,11 @@ pub fn build_version_for_repo(repo_path: impl Into<PathBuf>) -> Result<()> {
 /// ```no_run
 /// use cargo_version_info::commands::compute_version_string;
 ///
-/// if let Ok(version) = compute_version_string(".") {
-///     println!("cargo:rustc-env=CARGO_PKG_VERSION={}", version);
+/// #[tokio::main]
+/// async fn main() {
+///     if let Ok(version) = compute_version_string(".").await {
+///         println!("cargo:rustc-env=CARGO_PKG_VERSION={}", version);
+///     }
 /// }
 /// ```
 ///
@@ -282,7 +282,7 @@ pub fn build_version_for_repo(repo_path: impl Into<PathBuf>) -> Result<()> {
 /// 3. **GitHub API** (only in GitHub Actions)
 /// 4. **Manifest version** (from Cargo.toml) + git SHA if available
 /// 5. **Git SHA** fallback: `0.0.0-dev-<short-sha>`
-pub fn compute_version_string(repo_path: impl Into<PathBuf>) -> Result<String> {
+pub async fn compute_version_string(repo_path: impl Into<PathBuf>) -> Result<String> {
     let repo_root: PathBuf = repo_path.into();
     let manifest = repo_root.join("Cargo.toml");
 
@@ -302,19 +302,16 @@ pub fn compute_version_string(repo_path: impl Into<PathBuf>) -> Result<String> {
         let (owner, repo) = get_owner_repo(None, None)?;
         let github_token = None::<String>;
 
-        let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-        if let Ok((_, next)) = rt.block_on(github::calculate_next_version(
-            &owner,
-            &repo,
-            github_token.as_deref(),
-        )) {
+        if let Ok((_, next)) =
+            github::calculate_next_version(&owner, &repo, github_token.as_deref()).await
+        {
             return Ok(next);
         }
     }
 
     // Fall back to manifest version (from Cargo.toml), optionally append SHA if
     // available
-    if let Some(manifest_version) = read_manifest_version(&manifest) {
+    if let Some(manifest_version) = read_manifest_version(&manifest).await {
         let trimmed = manifest_version.trim();
         if !trimmed.is_empty() && trimmed != "0.0.0" {
             let version_with_sha = short_sha(&repo_root)
@@ -349,8 +346,8 @@ fn short_sha(repo_path: &PathBuf) -> Option<String> {
     Some(short.to_string())
 }
 
-fn read_manifest_version(manifest: &PathBuf) -> Option<String> {
-    let contents = fs::read_to_string(manifest).ok()?;
+async fn read_manifest_version(manifest: &PathBuf) -> Option<String> {
+    let contents = read_string_bounded(manifest, 16 * 1024 * 1024).await.ok()?;
     let value: toml::Value = toml::from_str(&contents).ok()?;
     value
         .get("package")
@@ -365,8 +362,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_build_version_env_priority() {
+    #[tokio::test]
+    async fn test_build_version_env_priority() {
         // Set BUILD_VERSION env var
         unsafe {
             env::set_var("BUILD_VERSION", "1.2.3");
@@ -379,15 +376,15 @@ mod tests {
             repo_path: ".".into(),
             format: "version".to_string(),
         };
-        let result = build_version(args);
+        let result = build_version(args).await;
         unsafe {
             env::remove_var("BUILD_VERSION");
         }
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_build_version_env_json() {
+    #[tokio::test]
+    async fn test_build_version_env_json() {
         unsafe {
             env::set_var("BUILD_VERSION", "2.0.0");
         }
@@ -399,15 +396,15 @@ mod tests {
             repo_path: ".".into(),
             format: "json".to_string(),
         };
-        let result = build_version(args);
+        let result = build_version(args).await;
         unsafe {
             env::remove_var("BUILD_VERSION");
         }
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_build_version_cargo_pkg_version() {
+    #[tokio::test]
+    async fn test_build_version_cargo_pkg_version() {
         // Clear BUILD_VERSION if set
         unsafe {
             env::remove_var("BUILD_VERSION");
@@ -422,7 +419,7 @@ mod tests {
             repo_path: ".".into(),
             format: "version".to_string(),
         };
-        let result = build_version(args);
+        let result = build_version(args).await;
         unsafe {
             env::remove_var("CARGO_PKG_VERSION");
         }
@@ -430,8 +427,8 @@ mod tests {
         let _ = result;
     }
 
-    #[test]
-    fn test_build_version_invalid_format() {
+    #[tokio::test]
+    async fn test_build_version_invalid_format() {
         unsafe {
             env::set_var("BUILD_VERSION", "1.0.0");
         }
@@ -443,15 +440,15 @@ mod tests {
             repo_path: ".".into(),
             format: "invalid".to_string(),
         };
-        let result = build_version(args);
+        let result = build_version(args).await;
         unsafe {
             env::remove_var("BUILD_VERSION");
         }
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_build_version_empty_env_var() {
+    #[tokio::test]
+    async fn test_build_version_empty_env_var() {
         unsafe {
             env::set_var("BUILD_VERSION", "");
         }
@@ -463,7 +460,7 @@ mod tests {
             repo_path: ".".into(),
             format: "version".to_string(),
         };
-        let result = build_version(args);
+        let result = build_version(args).await;
         unsafe {
             env::remove_var("BUILD_VERSION");
         }
@@ -471,8 +468,8 @@ mod tests {
         let _ = result;
     }
 
-    #[test]
-    fn test_build_version_override_priority() {
+    #[tokio::test]
+    async fn test_build_version_override_priority() {
         unsafe {
             env::set_var("BUILD_VERSION", "1.0.0");
             env::set_var("CARGO_PKG_VERSION_OVERRIDE", "2.0.0");
@@ -485,7 +482,7 @@ mod tests {
             repo_path: ".".into(),
             format: "version".to_string(),
         };
-        let result = build_version(args);
+        let result = build_version(args).await;
         unsafe {
             env::remove_var("BUILD_VERSION");
             env::remove_var("CARGO_PKG_VERSION_OVERRIDE");

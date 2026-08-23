@@ -184,12 +184,12 @@ pub async fn calculate_next_version(
 mod tests {
     use std::process::Command;
 
-    use tempfile::TempDir;
-
     use super::*;
 
-    fn create_test_git_repo_with_tags(tags: &[&str]) -> TempDir {
-        let dir = tempfile::tempdir().unwrap();
+    async fn create_test_git_repo_with_tags(tags: &[&str]) -> async_fs_io::TempDir {
+        let dir = async_fs_io::TempDir::create(std::env::temp_dir())
+            .await
+            .unwrap();
 
         // Initialize git repo
         Command::new("git")
@@ -211,7 +211,9 @@ mod tests {
             .unwrap();
 
         // Create an initial commit
-        std::fs::write(dir.path().join("README.md"), "# Test\n").unwrap();
+        async_fs_io::write_bytes(dir.path().join("README.md"), b"# Test\n")
+            .await
+            .unwrap();
         Command::new("git")
             .args(["add", "README.md"])
             .current_dir(dir.path())
@@ -236,9 +238,9 @@ mod tests {
         dir
     }
 
-    #[test]
-    fn test_get_latest_git_tag_version_no_tags() {
-        let dir = create_test_git_repo_with_tags(&[]);
+    #[tokio::test]
+    async fn test_get_latest_git_tag_version_no_tags() {
+        let dir = create_test_git_repo_with_tags(&[]).await;
         let original_dir = std::env::current_dir().unwrap();
 
         std::env::set_current_dir(dir.path()).unwrap();
@@ -248,9 +250,9 @@ mod tests {
         assert_eq!(result, None);
     }
 
-    #[test]
-    fn test_get_latest_git_tag_version_single_tag() {
-        let _dir = create_test_git_repo_with_tags(&["v0.1.0"]);
+    #[tokio::test]
+    async fn test_get_latest_git_tag_version_single_tag() {
+        let _dir = create_test_git_repo_with_tags(&["v0.1.0"]).await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -261,9 +263,9 @@ mod tests {
         assert_eq!(result, Some("0.1.0".to_string()));
     }
 
-    #[test]
-    fn test_get_latest_git_tag_version_multiple_tags() {
-        let _dir = create_test_git_repo_with_tags(&["v0.1.0", "v0.2.0", "v0.1.5"]);
+    #[tokio::test]
+    async fn test_get_latest_git_tag_version_multiple_tags() {
+        let _dir = create_test_git_repo_with_tags(&["v0.1.0", "v0.2.0", "v0.1.5"]).await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -275,9 +277,9 @@ mod tests {
         assert_eq!(result, Some("0.2.0".to_string()));
     }
 
-    #[test]
-    fn test_get_latest_git_tag_version_without_v_prefix() {
-        let _dir = create_test_git_repo_with_tags(&["0.3.0", "v0.2.0"]);
+    #[tokio::test]
+    async fn test_get_latest_git_tag_version_without_v_prefix() {
+        let _dir = create_test_git_repo_with_tags(&["0.3.0", "v0.2.0"]).await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -291,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_calculate_next_version_no_tags() {
-        let _dir = create_test_git_repo_with_tags(&[]);
+        let _dir = create_test_git_repo_with_tags(&[]).await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -305,7 +307,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_calculate_next_version_with_tags() {
-        let _dir = create_test_git_repo_with_tags(&["v0.1.2"]);
+        let _dir = create_test_git_repo_with_tags(&["v0.1.2"]).await;
         let dir_path = _dir.path().to_path_buf();
         let original_dir = std::env::current_dir().unwrap();
 
