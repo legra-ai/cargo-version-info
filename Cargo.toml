@@ -43,7 +43,7 @@ clap = { version = "4.6.6", default-features = false, features = [
     "std",
 ] }
 dotenvage = "0.7.3"
-gix = { version = "0.86.0", default-features = false, features = [
+gix = { version = "0.87.1", default-features = false, features = [
     "revision",
     "worktree-mutation",
     "index",
@@ -95,7 +95,7 @@ ssh-agent-client-rs = "1.1"
 [build-dependencies]
 async-fs-io = "0.1.5"
 anyhow = "1.0.104"
-gix = { version = "0.86.0", default-features = false, features = [
+gix = { version = "0.87.1", default-features = false, features = [
     "revision",
     "worktree-mutation",
     "index",
