@@ -239,9 +239,21 @@ additional_files to include them in the version commit.
 **Commit Signing (No GPG/SSH CLI Required):**
 
 SSH commit signing is implemented in pure Rust using the `ssh-key`
-crate. When signing is enabled in git config, the tool signs commits
-by communicating directly with ssh-agent - no `ssh-keygen` or `gpg`
-CLI tools needed.
+crate. Before changing version files or running hooks, the tool
+validates Git signing configuration and signs and verifies a test
+payload. `--no-commit` skips this preflight.
+
+Private-key paths select direct file signing. Public-key files,
+`key::` inline public keys, exact `SHA256:` fingerprints and encrypted
+private keys require an SSH agent. Paths may be absolute, relative to
+the repository root, or start with `~/`. Agent keys are matched by
+fingerprint, never by their comments. Load the configured key with
+`ssh-add` when using agent signing.
+
+The selected method and fingerprint are reported before the bump.
+The commit reuses that signer, even if a hook changes Git config.
+An agent error stops the operation; it never switches to file signing.
+No `ssh-keygen` or `gpg` CLI is needed for signing.
 
 ```bash
 # Configure signing (standard git config)
@@ -253,7 +265,11 @@ git config user.signingkey ~/.ssh/id_ed25519.pub
 cargo version-info bump --patch
 ```
 
-GPG signing is not yet implemented (requires gpg-agent).
+Git's default format is OpenPGP, which is unsupported here. Set
+`gpg.format=ssh` explicitly when signing is enabled. Invalid signing
+configuration fails before any version files, hooks, index or HEAD
+are changed. A signer can still become unavailable after preflight;
+such a commit fails without switching keys or signing methods.
 
 ### `cargo version-info compare`
 

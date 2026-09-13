@@ -283,12 +283,22 @@ pub async fn bump(args: BumpArgs) -> Result<()> {
         current_version, target_version
     ));
 
-    // Step 4: Update Cargo.toml
-    logger.status("Updating", "Cargo.toml");
     let manifest_path = args
         .manifest_path
         .as_deref()
         .unwrap_or_else(|| std::path::Path::new("./Cargo.toml"));
+    let signer = if args.no_commit {
+        None
+    } else {
+        logger.status("Checking", "commit signing");
+        let signer = signing::PreparedSigner::for_manifest(manifest_path).await?;
+        logger.finish();
+        logger.print_message(&format!("  Signing: {}", signer.description()));
+        Some(signer)
+    };
+
+    // Step 4: Update Cargo.toml only after signing preflight succeeds.
+    logger.status("Updating", "Cargo.toml");
     version_update::update_cargo_toml_version(manifest_path, &current_version, &target_version)
         .await?;
     logger.finish();
@@ -368,7 +378,7 @@ pub async fn bump(args: BumpArgs) -> Result<()> {
     };
 
     // Step 8: Commit changes (unless --no-commit)
-    if !args.no_commit {
+    if let Some(signer) = &signer {
         logger.status("Committing", "version changes");
 
         // Collect additional files to commit (besides Cargo.toml which is handled
@@ -423,12 +433,13 @@ pub async fn bump(args: BumpArgs) -> Result<()> {
         }
 
         // Commit Cargo.toml (with selective staging) plus additional files
-        commit::commit_version_changes_with_files(
+        commit::commit_version_changes_with_signer(
             manifest_path,
             &package_name,
             &current_version,
             &target_version,
             &additional_files,
+            signer,
         )
         .await?;
         logger.finish();

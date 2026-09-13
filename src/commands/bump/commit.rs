@@ -276,6 +276,26 @@ pub async fn commit_version_changes_with_files(
     new_version: &str,
     additional_files: &[AdditionalFile],
 ) -> Result<()> {
+    let signer = super::signing::PreparedSigner::for_manifest(manifest_path).await?;
+    commit_version_changes_with_signer(
+        manifest_path,
+        crate_name,
+        old_version,
+        new_version,
+        additional_files,
+        &signer,
+    )
+    .await
+}
+
+pub(super) async fn commit_version_changes_with_signer(
+    manifest_path: &Path,
+    crate_name: &str,
+    old_version: &str,
+    new_version: &str,
+    additional_files: &[AdditionalFile],
+    signer: &super::signing::PreparedSigner,
+) -> Result<()> {
     let workspace_package_names = workspace_package_names(manifest_path)?;
 
     // Discover git repository by walking up from the manifest's directory
@@ -413,7 +433,15 @@ pub async fn commit_version_changes_with_files(
     let tree_id = update_tree_with_files(&repo, &head_tree, &file_updates)?;
 
     // Create the commit
-    let commit_id = create_commit(&repo, &tree_id, head_commit_id, old_version, new_version)?;
+    let commit_id = create_commit(
+        &repo,
+        &tree_id,
+        head_commit_id,
+        old_version,
+        new_version,
+        signer,
+    )
+    .await?;
 
     // Update HEAD to point to the new commit
     update_head(&repo, commit_id)?;
@@ -707,12 +735,13 @@ fn update_tree_with_files(
 /// # Returns
 ///
 /// Returns the object ID of the newly created commit.
-fn create_commit(
+async fn create_commit(
     repo: &gix::Repository,
     tree_id: &gix::ObjectId,
-    parent_id: gix::Id,
+    parent_id: gix::Id<'_>,
     old_version: &str,
     new_version: &str,
+    signer: &super::signing::PreparedSigner,
 ) -> Result<gix::ObjectId> {
     use super::signing;
 
@@ -727,32 +756,15 @@ fn create_commit(
     // We only have one parent (the current HEAD)
     let parents: SmallVec<[gix::ObjectId; 1]> = SmallVec::from_iter([parent_id.detach()]);
 
-    // Check if signing is configured
-    let signing_config = signing::read_signing_config(repo);
-
-    // Build extra headers for signature (if signing is enabled)
-    let extra_headers = if signing_config.enabled {
-        // Build the commit payload that will be signed
-        let payload =
-            signing::build_commit_payload(tree_id, parent_id, &author, &committer, &commit_message);
-
-        // Sign the payload
-        match signing::sign_commit_payload(&signing_config, &payload) {
-            Ok(Some(signature)) => {
-                // Add signature as gpgsig header
-                vec![("gpgsig".into(), signature.into())]
-            }
-            Ok(None) => {
-                // Signing not configured (shouldn't happen since we checked enabled)
-                vec![]
-            }
-            Err(err) => {
-                // Signing failed - this is an error, not a warning
-                return Err(err.context("Failed to sign commit"));
-            }
-        }
-    } else {
-        vec![]
+    let payload =
+        signing::build_commit_payload(tree_id, parent_id, &author, &committer, &commit_message);
+    let extra_headers = match signer
+        .sign(&payload)
+        .await
+        .context("Failed to sign commit")?
+    {
+        Some(signature) => vec![("gpgsig".into(), signature.into())],
+        None => vec![],
     };
 
     // Write the commit object to the object database
