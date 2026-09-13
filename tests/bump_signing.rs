@@ -1,5 +1,8 @@
 //! Signing must be usable before a bump changes any repository files.
 
+// These fixtures launch the Unix OpenSSH agent with a temporary socket.
+#![cfg(unix)]
+
 mod signing_support;
 
 use async_fs_io::{

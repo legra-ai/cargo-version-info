@@ -4,6 +4,7 @@ use std::path::{
     Path,
     PathBuf,
 };
+#[cfg(unix)]
 use std::time::Duration;
 
 use anyhow::{
@@ -59,12 +60,19 @@ impl AgentSigner {
         })
     }
 
+    #[cfg(unix)]
     fn connect(path: &Path) -> Result<Client> {
         let socket = std::os::unix::net::UnixStream::connect(path)
             .with_context(|| format!("Cannot connect to SSH agent at {}", path.display()))?;
         socket.set_read_timeout(Some(Duration::from_secs(15)))?;
         socket.set_write_timeout(Some(Duration::from_secs(15)))?;
         Ok(Client::with_read_write(Box::new(socket)))
+    }
+
+    #[cfg(windows)]
+    fn connect(path: &Path) -> Result<Client> {
+        Client::connect(path)
+            .with_context(|| format!("Cannot connect to SSH agent at {}", path.display()))
     }
 
     fn select_identity(

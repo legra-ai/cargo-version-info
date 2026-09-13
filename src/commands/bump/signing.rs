@@ -97,11 +97,25 @@ enum Backend {
 impl PreparedSigner {
     /// Resolve effective Git configuration and prove signing works.
     pub async fn for_manifest(manifest: &Path) -> Result<Self> {
-        let repo = gix::discover(manifest.parent().unwrap_or_else(|| Path::new(".")))
-            .context("Signing preflight: not in a Git repository")?;
-        let config = read_signing_config(&repo)?;
-        let root = repo.workdir().context("Signing requires a working tree")?;
-        let signer = Self::prepare(&config, root)
+        let manifest_dir = manifest
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        // Audited blocking boundary: gix repository discovery/configuration only
+        // offers synchronous filesystem I/O. Replace when gix gains async access.
+        let (config, root) = tokio::task::spawn_blocking(move || -> Result<_> {
+            let repo = gix::discover(manifest_dir)
+                .context("Signing preflight: not in a Git repository")?;
+            let config = read_signing_config(&repo)?;
+            let root = repo
+                .workdir()
+                .context("Signing requires a working tree")?
+                .to_path_buf();
+            Ok((config, root))
+        })
+        .await
+        .context("Signing configuration task failed")??;
+        let signer = Self::prepare(&config, &root)
             .await
             .context("Signing preflight failed")?;
         signer
