@@ -252,7 +252,8 @@ edition = "2021"
         assert!(content.contains("# Package name"));
         // Verify version was updated
         assert!(content.contains("version = \"0.2.0\""));
-        // Verify version comment still exists (though toml_edit may reformat it)
+        // Verify version comment still exists (though toml_edit may reformat
+        // it)
         assert!(!content.contains("0.1.0"));
     }
 
@@ -292,8 +293,9 @@ edition.workspace = true
 
     #[tokio::test]
     async fn test_package_with_workspace_inheritance_not_updated() {
-        // Test case: [package] version inherits from workspace (version.workspace =
-        // true) Only [workspace.package] should be updated
+        // Test case: [package] version inherits from workspace
+        // (version.workspace = true) Only [workspace.package] should be
+        // updated
         let (_dir, manifest_path) = create_temp_manifest(
             r#"[workspace.package]
 version = "1.0.0"

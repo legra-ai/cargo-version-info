@@ -118,7 +118,8 @@ pub async fn agent(path: &Path, key: &Path) -> (Child, PathBuf) {
             agent.try_wait().unwrap().is_none(),
             "ssh-agent exited before ready"
         );
-        // Yield while the child creates its socket; no synchronous filesystem I/O.
+        // Yield while the child creates its socket; no synchronous filesystem
+        // I/O.
         tokio::task::yield_now().await;
         let _ = Command::new("sleep").arg("0.01").status().await.unwrap();
     }

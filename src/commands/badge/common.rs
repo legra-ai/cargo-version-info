@@ -39,7 +39,8 @@ pub async fn guess_if_published(package: &cargo_metadata::Package) -> Result<boo
         || try_exists(manifest_dir.join("LICENSE-MIT")).await?
         || try_exists(manifest_dir.join("LICENSE-APACHE")).await?;
 
-    // Check GitHub workflows for "cargo publish" (relative to manifest directory)
+    // Check GitHub workflows for "cargo publish" (relative to manifest
+    // directory)
     let workflows_dir = manifest_dir.join(".github/workflows");
     let has_publish_in_workflows = if !try_exists(&workflows_dir).await? {
         false
@@ -65,8 +66,8 @@ pub async fn guess_if_published(package: &cargo_metadata::Package) -> Result<boo
         found
     };
 
-    // Best-effort guess: if has license (in metadata or file), or has publish in
-    // workflows
+    // Best-effort guess: if has license (in metadata or file), or has publish
+    // in workflows
     let likely_published = has_license_in_metadata || has_license || has_publish_in_workflows;
 
     Ok(likely_published)

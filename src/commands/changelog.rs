@@ -180,8 +180,9 @@ fn resolve_to_commit_oid<'a>(
     git_repo: &'a gix::Repository,
     reference: &str,
 ) -> Result<gix::Id<'a>> {
-    // First, try using rev_parse with ^{commit} suffix to follow tags automatically
-    // This handles all cases (tags, branches, HEAD, SHAs) and peels tags
+    // First, try using rev_parse with ^{commit} suffix to follow tags
+    // automatically This handles all cases (tags, branches, HEAD, SHAs) and
+    // peels tags
     let ref_with_suffix = format!("{}^{{commit}}", reference);
     let ref_bstr: BString = ref_with_suffix.into();
     if let Ok(spec) = git_repo.rev_parse(ref_bstr.as_bstr())
@@ -259,7 +260,8 @@ pub fn generate_changelog_to_writer(
         let end_ref = parts[1].trim();
 
         // Resolve references using rev_parse, following tags to commits
-        // If start reference doesn't exist, treat it as if there's no start point
+        // If start reference doesn't exist, treat it as if there's no start
+        // point
         let start_oid = match resolve_to_commit_oid(&git_repo, start_ref) {
             Ok(oid) => Some(oid),
             Err(_) => {
@@ -288,8 +290,8 @@ pub fn generate_changelog_to_writer(
         (Some(tag_oid), head_oid)
     } else {
         // Default: since last version tag
-        // Find the latest version tag by collecting all version tags, parsing them,
-        // sorting by version, and taking the latest one
+        // Find the latest version tag by collecting all version tags, parsing
+        // them, sorting by version, and taking the latest one
         let mut version_tags: Vec<(gix::Id, String, (u32, u32, u32))> = Vec::new();
 
         let refs = git_repo
@@ -562,7 +564,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_changelog_finds_latest_tag_not_first() {
-        // Test that changelog finds the latest version tag, not just the first one
+        // Test that changelog finds the latest version tag, not just the first
+        // one
         let _dir = create_test_git_repo_with_tags_and_commits(
             &["v0.1.0", "v0.1.5", "v0.2.0"], // Multiple tags - v0.2.0 should be latest
             &[
@@ -659,7 +662,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_changelog_no_tags() {
-        // Test changelog generation when no tags exist - should generate from beginning
+        // Test changelog generation when no tags exist - should generate from
+        // beginning
         let _dir = create_test_git_repo_with_tags_and_commits(
             &[],
             &["feat(test): add feature", "fix(test): fix bug"],

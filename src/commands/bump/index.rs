@@ -170,7 +170,8 @@ pub async fn stage_file(
     }
 
     // Create a new state with all entries including the updated one
-    // We need to create a new state because we can't directly mutate path_backing
+    // We need to create a new state because we can't directly mutate
+    // path_backing
     let mut new_state = State::new(repo.object_hash());
 
     // Copy all existing entries to the new state
@@ -187,9 +188,9 @@ pub async fn stage_file(
     }
 
     // Add the new/updated entry
-    // We use default stat since we've already verified the file has version changes
-    // The stat is primarily used by git for optimization (detecting if file
-    // changed)
+    // We use default stat since we've already verified the file has version
+    // changes The stat is primarily used by git for optimization (detecting
+    // if file changed)
     let path_bstr: &BStr = path_bytes.into();
     new_state.dangerously_push_entry(
         entry::Stat::default(),

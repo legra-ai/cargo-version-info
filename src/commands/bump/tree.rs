@@ -145,7 +145,8 @@ pub fn build_tree_from_index(index_state: &State, repo: &gix::Repository) -> Res
     use std::collections::HashMap;
 
     // Group entries by directory path
-    // This is preparation for full recursive tree building (not yet implemented)
+    // This is preparation for full recursive tree building (not yet
+    // implemented)
     #[allow(clippy::type_complexity)]
     let mut trees: HashMap<Vec<&[u8]>, Vec<(Vec<&[u8]>, entry::Mode, gix::ObjectId)>> =
         HashMap::new();
@@ -162,8 +163,9 @@ pub fn build_tree_from_index(index_state: &State, repo: &gix::Repository) -> Res
                 .or_default()
                 .push((path_parts, entry.mode, entry.id));
         } else {
-            // File in directory - for now, add to root with full path (simplified)
-            // TODO: Build proper directory trees recursively
+            // File in directory - for now, add to root with full path
+            // (simplified) TODO: Build proper directory trees
+            // recursively
             trees
                 .entry(vec![])
                 .or_default()

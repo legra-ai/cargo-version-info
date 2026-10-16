@@ -101,8 +101,9 @@ impl PreparedSigner {
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
-        // Audited blocking boundary: gix repository discovery/configuration only
-        // offers synchronous filesystem I/O. Replace when gix gains async access.
+        // Audited blocking boundary: gix repository discovery/configuration
+        // only offers synchronous filesystem I/O. Replace when gix
+        // gains async access.
         let (config, root) = tokio::task::spawn_blocking(move || -> Result<_> {
             let repo = gix::discover(manifest_dir)
                 .context("Signing preflight: not in a Git repository")?;

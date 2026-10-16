@@ -370,8 +370,8 @@ pub(super) async fn commit_version_changes_with_signer(
             .or_else(|_| file.path.strip_prefix("."))
             .unwrap_or(&file.path);
 
-        // Determine what content to commit based on file type and available HEAD
-        // content
+        // Determine what content to commit based on file type and available
+        // HEAD content
         let content_to_commit = match (&file.head_content, file.file_type) {
             (Some(head_content), FileType::Readme) => {
                 // Check if there are non-version changes
@@ -447,9 +447,10 @@ pub(super) async fn commit_version_changes_with_signer(
     update_head(&repo, commit_id)?;
 
     // Reset the index to match HEAD
-    // This is necessary because we created the commit via direct tree manipulation,
-    // bypassing the index. Without this, any previously staged changes would remain
-    // in the index, causing confusing `git status` output.
+    // This is necessary because we created the commit via direct tree
+    // manipulation, bypassing the index. Without this, any previously
+    // staged changes would remain in the index, causing confusing `git
+    // status` output.
     reset_index_to_head(&repo)?;
 
     Ok(())
@@ -635,7 +636,8 @@ fn update_tree_with_files(
                 .collect();
 
             if !direct_updates.is_empty() {
-                // Direct file update - use new blob (take the last one if multiple)
+                // Direct file update - use new blob (take the last one if
+                // multiple)
                 let (_, blob_id) = direct_updates.last().unwrap();
                 tree_entries.push(tree::Entry {
                     mode: entry.mode(),

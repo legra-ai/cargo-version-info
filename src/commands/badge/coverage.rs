@@ -44,7 +44,8 @@ pub async fn badge_coverage(
         // Determine link target: prefer GitHub repository, fallback to coverage
         // directory
         let link_target = if let Some(repo) = &package.repository {
-            // Link to GitHub Actions if it's a GitHub repo, otherwise just the repo
+            // Link to GitHub Actions if it's a GitHub repo, otherwise just the
+            // repo
             if repo.contains("github.com") {
                 format!("{}/actions", repo)
             } else {
@@ -132,8 +133,8 @@ async fn get_coverage_percentage(
         .stdout_str()
         .context("Failed to parse cargo-llvm-cov output")?;
 
-    // cargo-llvm-cov JSON format: {"data": [{"totals": {"lines": {"percent": 85.5},
-    // ...}}], ...}
+    // cargo-llvm-cov JSON format: {"data": [{"totals": {"lines": {"percent":
+    // 85.5}, ...}}], ...}
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
         && let Some(data) = json.get("data").and_then(|d| d.as_array())
         && let Some(first_data) = data.first()

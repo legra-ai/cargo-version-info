@@ -155,8 +155,9 @@ mod tests {
         };
         // Should fail on invalid format even if repo is valid
         let result = dev(args).await;
-        // If repo is invalid, we get repo error; if repo is valid, we get format error
-        // The format check happens after repo discovery, so we may get either error
+        // If repo is invalid, we get repo error; if repo is valid, we get
+        // format error The format check happens after repo discovery,
+        // so we may get either error
         if let Err(e) = result {
             let err_msg = e.to_string();
             // Accept either format error or repo discovery error

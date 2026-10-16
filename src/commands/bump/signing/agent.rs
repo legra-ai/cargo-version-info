@@ -41,11 +41,13 @@ impl AgentSigner {
         let socket = PathBuf::from(std::env::var_os("SSH_AUTH_SOCK")
             .context("SSH_AUTH_SOCK is not set; start an SSH agent and load the configured signing key with ssh-add")?);
         let connection_path = socket.clone();
-        // Audited blocking boundary: ssh-agent-client-rs exposes only synchronous
-        // socket I/O. Replace this adapter when it gains an asynchronous transport.
+        // Audited blocking boundary: ssh-agent-client-rs exposes only
+        // synchronous socket I/O. Replace this adapter when it gains an
+        // asynchronous transport.
         let (identity, public) = tokio::task::spawn_blocking(move || {
             let mut client = Self::connect(&connection_path)?;
-            // bounded: identities belong to the local SSH agent, not repository data.
+            // bounded: identities belong to the local SSH agent, not repository
+            // data.
             let identities = client
                 .list_all_identities()
                 .context("Cannot list SSH-agent identities")?;
@@ -79,7 +81,8 @@ impl AgentSigner {
         identities: Vec<Identity<'static>>,
         fingerprint: Fingerprint,
     ) -> Result<(Identity<'static>, PublicKey)> {
-        // bounded: diagnostics cover only identities loaded into the local agent.
+        // bounded: diagnostics cover only identities loaded into the local
+        // agent.
         let mut available = String::new();
         for identity in identities {
             let public = match &identity {
@@ -105,14 +108,16 @@ impl AgentSigner {
         let socket = self.socket.clone();
         let identity = self.identity.clone();
         let public = self.public.clone();
-        // bounded: SSHSIG signs a fixed-size SHA512 digest plus protocol fields.
+        // bounded: SSHSIG signs a fixed-size SHA512 digest plus protocol
+        // fields.
         let mut blob = Vec::with_capacity(128);
         blob.extend_from_slice(b"SSHSIG");
         for field in [b"git".as_slice(), b"", b"sha512", &Sha512::digest(payload)] {
             blob.extend_from_slice(&(field.len() as u32).to_be_bytes());
             blob.extend_from_slice(field);
         }
-        // Audited blocking boundary: same synchronous agent transport as discovery.
+        // Audited blocking boundary: same synchronous agent transport as
+        // discovery.
         tokio::task::spawn_blocking(move || {
             let mut client = Self::connect(&socket)?;
             let signature = client

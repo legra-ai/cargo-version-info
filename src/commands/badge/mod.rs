@@ -205,7 +205,8 @@ pub async fn find_package() -> Result<cargo_metadata::Package> {
     // Try to find the package in the current working directory
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
 
-    // Canonicalize current directory and all package directories, then find match.
+    // Canonicalize current directory and all package directories, then find
+    // match.
     let canonical_current_dir = canonicalize(&current_dir).await.ok();
     let mut packages_with_dirs = Vec::new();
     for package in &metadata.packages {
@@ -226,8 +227,8 @@ pub async fn find_package() -> Result<cargo_metadata::Package> {
         return Ok(pkg.clone());
     }
 
-    // Also try matching the manifest path directly (for cases where Cargo.toml is
-    // in current dir)
+    // Also try matching the manifest path directly (for cases where Cargo.toml
+    // is in current dir)
     let current_manifest = current_dir.join("Cargo.toml");
     let canonical_current_manifest = canonicalize(&current_manifest).await.ok();
     let mut packages_with_manifests = Vec::new();
@@ -252,9 +253,9 @@ pub async fn find_package() -> Result<cargo_metadata::Package> {
 
     // If we're in a workspace without a root package, check for default-members
     // This follows cargo's behavior: use default-members if available
-    // workspace_default_members implements Deref<Target = [PackageId]>, so we can
-    // use it as a slice It may not be available in older Cargo versions, so we
-    // check if it's available first
+    // workspace_default_members implements Deref<Target = [PackageId]>, so we
+    // can use it as a slice It may not be available in older Cargo
+    // versions, so we check if it's available first
     if metadata.workspace_default_members.is_available()
         && !metadata.workspace_default_members.is_empty()
         && let Some(first_default_id) = metadata.workspace_default_members.first()

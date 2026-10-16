@@ -17,13 +17,13 @@ fi
 echo "Rust files detected in commit, running checks..."
 echo ""
 
-# Run cargo fmt check on changed files only
-echo "Running cargo fmt --check on changed files..."
+# Run ./scripts/fmt.sh check on changed files only
+echo "Running ./scripts/fmt.sh --check on changed files..."
 # shellcheck disable=SC2086
-cargo fmt -- --check $RUST_FILES || {
+./scripts/fmt.sh --check || {
     echo ""
     echo "❌ Code formatting check failed!"
-    echo "Please run 'cargo fmt' to format your code before committing."
+    echo "Please run './scripts/fmt.sh' to format your code before committing."
     exit 1
 }
 

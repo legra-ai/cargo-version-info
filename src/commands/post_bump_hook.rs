@@ -334,8 +334,8 @@ version = "1.5.0"
     #[tokio::test]
     #[serial_test::serial]
     async fn test_post_bump_hook_no_version() {
-        // Cargo defaults to "0.0.0" when no version is specified, so this should
-        // succeed
+        // Cargo defaults to "0.0.0" when no version is specified, so this
+        // should succeed
         let _dir = create_temp_cargo_project(
             r#"
 [package]

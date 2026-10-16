@@ -179,8 +179,8 @@ async fn has_env_files() -> anyhow::Result<bool> {
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env* files using dotenvage
-    // This allows cargo-version-info to access encrypted secrets like GITHUB_TOKEN
-    // stored in .env.local files protected by dotenvage
+    // This allows cargo-version-info to access encrypted secrets like
+    // GITHUB_TOKEN stored in .env.local files protected by dotenvage
     // Only attempt to load if .env* files exist to avoid unnecessary warnings
     if has_env_files().await?
         && let Err(e) = dotenvage::EnvLoader::new().and_then(|loader| loader.load())

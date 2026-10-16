@@ -103,8 +103,8 @@ pub async fn current(args: CurrentArgs) -> Result<()> {
     let mut logger = cargo_plugin_utils::logger::Logger::new();
 
     logger.status("Reading", "package version");
-    // Use find_package which automatically handles --manifest-path and workspace
-    // logic
+    // Use find_package which automatically handles --manifest-path and
+    // workspace logic
     let package = find_package(args.manifest_path.as_deref())?;
     let version = package.version.to_string();
     logger.finish();
@@ -186,7 +186,8 @@ version.workspace = true
             .await
             .unwrap();
 
-        // Test from the member package directory (where we'd normally run the command)
+        // Test from the member package directory (where we'd normally run the
+        // command)
         let manifest_path = member_dir.join("Cargo.toml");
         let args = CurrentArgs {
             manifest_path: Some(manifest_path),
@@ -297,8 +298,8 @@ name = "test"
 
     #[tokio::test]
     async fn test_current_no_version() {
-        // Cargo defaults to "0.0.0" when no version is specified, so this should
-        // succeed
+        // Cargo defaults to "0.0.0" when no version is specified, so this
+        // should succeed
         let _dir = create_temp_cargo_project(
             r#"
 [package]

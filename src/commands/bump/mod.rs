@@ -381,8 +381,8 @@ pub async fn bump(args: BumpArgs) -> Result<()> {
     if let Some(signer) = &signer {
         logger.status("Committing", "version changes");
 
-        // Collect additional files to commit (besides Cargo.toml which is handled
-        // specially)
+        // Collect additional files to commit (besides Cargo.toml which is
+        // handled specially)
         let mut additional_files: Vec<AdditionalFile> = Vec::new();
 
         // Include Cargo.lock if it was updated

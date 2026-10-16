@@ -265,7 +265,8 @@ version = "0.1.0"
             current_version: None,
             exit_on_error: true,
         };
-        // Will succeed if git repo exists and versions match, otherwise may fail
+        // Will succeed if git repo exists and versions match, otherwise may
+        // fail
         let _ = pre_bump_hook(args).await;
     }
 
@@ -290,8 +291,8 @@ version = "0.0.0"
         };
         // Should warn but not fail
         let result = pre_bump_hook(args).await;
-        // May succeed or fail depending on git state, but shouldn't fail on major bump
-        // warning
+        // May succeed or fail depending on git state, but shouldn't fail on
+        // major bump warning
         let _ = result;
     }
 

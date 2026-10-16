@@ -45,7 +45,8 @@ pub async fn get_latest_release_version(
             if error_msg.contains("No releases found") {
                 Ok(None)
             } else if error_msg.contains("404") || error_msg.contains("Not Found") {
-                // 404 could mean private repo without auth or repo doesn't exist
+                // 404 could mean private repo without auth or repo doesn't
+                // exist
                 if token.is_none() {
                     Err(anyhow::anyhow!(
                         "Repository not found or is private. For private repositories, \

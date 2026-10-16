@@ -161,14 +161,16 @@ pub fn apply_version_hunks(
                     // This is a version line being removed - apply the change
                     // (skip it) Don't add to result
                 } else {
-                    // Non-version line removed - keep the original (don't apply change)
+                    // Non-version line removed - keep the original (don't apply
+                    // change)
                     result.push(line);
                 }
             }
             ChangeTag::Insert => {
                 // Line added in working directory
                 if is_version_related {
-                    // This is a version line being added - apply the change (include it)
+                    // This is a version line being added - apply the change
+                    // (include it)
                     result.push(line);
                 } else {
                     // Non-version line added - don't apply the change (skip it)

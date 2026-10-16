@@ -320,7 +320,8 @@ version = "3.0.0"
             github_output: Some(output_file.path().to_string_lossy().to_string()),
         };
         let result = changed(args).await;
-        // May succeed or fail depending on git state, but if it succeeds, check output
+        // May succeed or fail depending on git state, but if it succeeds, check
+        // output
         if result.is_ok() {
             let content = async_fs_io::read_string_bounded(output_file.path(), 1024 * 1024)
                 .await
