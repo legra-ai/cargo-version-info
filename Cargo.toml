@@ -14,19 +14,7 @@ homepage = "https://github.com/legra-ai/cargo-version-info"
 rust-version = "1.94.1"
 publish = true
 
-exclude = [
-    ".cargo/",
-    ".cargo-husky/",
-    ".clippy.toml",
-    ".cursor/",
-    ".github/",
-    ".gitignore",
-    ".rust-toolchain.toml",
-    ".vscode/",
-    "cog.toml",
-    "rustfmt.toml",
-    "scripts/",
-]
+include = ["src/**", "tests/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
 
 [[bin]]
 name = "cargo-version-info"
@@ -82,7 +70,7 @@ toml_edit = "0.25.13"
 carlog = "0.1"
 console = "0.16.4"
 indicatif = "0.18.6"
-cargo-plugin-utils = "0.0.12"
+cargo-plugin-utils = "0.0.14"
 portable-pty = "0.9.0"
 smallvec = "1.15.2"
 tempfile = "3.27.0"
@@ -93,18 +81,7 @@ ssh-key = { version = "0.6", features = ["ed25519", "p256", "p384", "rsa"] }
 ssh-agent-client-rs = "1.1"
 
 [build-dependencies]
-async-fs-io = "0.1.5"
-anyhow = "1.0.104"
-gix = { version = "0.86.0", default-features = false, features = [
-    "revision",
-    "worktree-mutation",
-    "index",
-    "blob-diff",
-    "sha1",
-] }
-toml = "1.1"
 rhusky = "0.0.6"
-tokio = { version = "1", features = ["macros", "rt"] }
 
 [dev-dependencies]
 tempfile = "3.27"
