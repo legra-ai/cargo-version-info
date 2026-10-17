@@ -30,8 +30,8 @@ clap = { version = "4.6.6", default-features = false, features = [
     "env",
     "std",
 ] }
-dotenvage = "0.7.3"
-gix = { version = "0.86.0", default-features = false, features = [
+dotenvage = "0.8.2"
+gix = { version = "0.89.0", default-features = false, features = [
     "revision",
     "worktree-mutation",
     "index",
@@ -70,7 +70,7 @@ toml_edit = "0.25.13"
 carlog = "0.1"
 console = "0.16.4"
 indicatif = "0.18.6"
-cargo-plugin-utils = "0.0.14"
+cargo-plugin-utils = "0.0.16"
 portable-pty = "0.9.0"
 smallvec = "1.15.2"
 tempfile = "3.27.0"
@@ -85,7 +85,7 @@ rhusky = "2.0.1"
 
 [dev-dependencies]
 tempfile = "3.27"
-serial_test = "3"
+serial_test = "4.0.1"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
