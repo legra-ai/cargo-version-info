@@ -432,7 +432,7 @@ fn format_signature_for_header(signature: &[u8]) -> Vec<u8> {
 /// separately after signing.
 pub fn build_commit_payload(
     tree_id: &gix::ObjectId,
-    parent_id: gix::Id,
+    parent_id: gix::ObjectId,
     author: &gix::actor::Signature,
     committer: &gix::actor::Signature,
     message: &str,
@@ -776,26 +776,11 @@ mod tests {
         let committer = author.clone();
         let message = "chore(version): bump 1.0.0 -> 1.0.1";
 
-        // We need a repository to get an Id, but for this test we can use a
-        // detached ObjectId
-        let repo = gix::open_opts(
-            std::env::current_dir().expect("No current dir"),
-            gix::open::Options::isolated(),
-        )
-        .expect("Failed to open repo");
-        let parent_id_ref = repo.find_object(parent_id);
-
-        // Skip test if we can't find the object (expected in test environment)
-        if parent_id_ref.is_err() {
-            // Can't test without a real repo with this object
-            return;
-        }
-
-        let parent_id = parent_id_ref.unwrap().id();
         let payload = build_commit_payload(&tree_id, parent_id, &author, &committer, message);
         let payload_str = String::from_utf8_lossy(&payload);
 
         assert!(payload_str.starts_with("tree 0123456789abcdef0123456789abcdef01234567\n"));
+        assert!(payload_str.contains("parent fedcba9876543210fedcba9876543210fedcba98\n"));
         assert!(payload_str.contains("author Test User <test@example.com>"));
         assert!(payload_str.contains("committer Test User <test@example.com>"));
         assert!(payload_str.ends_with("chore(version): bump 1.0.0 -> 1.0.1"));
