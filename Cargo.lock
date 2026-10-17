@@ -195,7 +195,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "075ef53066a95849d90d4899af6a0c9000ab10396120d39c9756c5d0b0fad69d"
 dependencies = [
  "fs2",
- "rhusky",
+ "rhusky 0.0.6",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "async-fs-io"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e80fff4ed286521fad46c96e60dce5c868c792b947de687f4c46d264203a8ed7"
+dependencies = [
+ "fs2",
+ "rhusky 0.0.6",
  "thiserror 2.0.20",
  "tokio",
  "uuid",
@@ -393,7 +406,7 @@ dependencies = [
  "gix 0.89.0",
  "indicatif",
  "portable-pty",
- "rhusky",
+ "rhusky 0.0.6",
  "tokio",
 ]
 
@@ -402,7 +415,7 @@ name = "cargo-version-info"
 version = "0.0.21"
 dependencies = [
  "anyhow",
- "async-fs-io",
+ "async-fs-io 0.1.5",
  "bstr",
  "cargo-plugin-utils",
  "cargo_metadata",
@@ -416,7 +429,7 @@ dependencies = [
  "portable-pty",
  "regex",
  "reqwest",
- "rhusky",
+ "rhusky 1.0.2",
  "serde",
  "serde_json",
  "serial_test",
@@ -933,7 +946,7 @@ dependencies = [
  "keyring-core",
  "linux-keyutils-keyring-store",
  "nix 0.31.3",
- "rhusky",
+ "rhusky 0.0.6",
  "security-framework",
  "serde_json",
  "tempfile",
@@ -4295,6 +4308,16 @@ name = "rhusky"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd58f5095f1eaaee85441008005db48773976f5bb85bedd35d6cf3f04db8ec4b"
+
+[[package]]
+name = "rhusky"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3214d6aa073af2bdfe58d4d487f1c525ea7b00cab0ceb4183e9fb5b87aec514"
+dependencies = [
+ "async-fs-io 0.2.0",
+ "tokio",
+]
 
 [[package]]
 name = "ring"
