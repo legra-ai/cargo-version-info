@@ -42,6 +42,8 @@ class MaintenancePolicyTests(unittest.TestCase):
 
     def test_package_contains_integration_tests_and_licenses(self):
         package = tomllib.loads((ROOT / 'Cargo.toml').read_text())['package']
+        if (ROOT / 'build.rs').exists():
+            self.assertIn('build.rs', package['include'])
         self.assertIn('tests/**', package['include'])
         self.assertIn('LICENSE-MIT', package['include'])
         self.assertIn('LICENSE-APACHE', package['include'])

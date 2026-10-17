@@ -14,7 +14,7 @@ homepage = "https://github.com/legra-ai/cargo-version-info"
 rust-version = "1.94.1"
 publish = true
 
-include = ["src/**", "tests/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
+include = ["src/**", "tests/**", "build.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
 
 [[bin]]
 name = "cargo-version-info"
