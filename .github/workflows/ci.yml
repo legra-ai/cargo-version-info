@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   ci:
-    uses: legra-ai/github-actions/.github/workflows/cargo-maintenance.yml@ce9df3b84458b7a2f0c771fad3a8bf725fbef47d
+    uses: legra-ai/github-actions/.github/workflows/cargo-maintenance.yml@0bead4673cfb56ba38b46fa3661b053572c425f6
     with:
       crate-name: cargo-version-info
       kind: binary
