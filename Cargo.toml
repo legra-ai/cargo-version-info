@@ -81,7 +81,7 @@ ssh-key = { version = "0.6", features = ["ed25519", "p256", "p384", "rsa"] }
 ssh-agent-client-rs = "1.1"
 
 [build-dependencies]
-rhusky = "1.0.2"
+rhusky = "2.0.0"
 
 [dev-dependencies]
 tempfile = "3.27"

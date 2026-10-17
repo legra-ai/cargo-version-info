@@ -50,5 +50,14 @@ class MaintenancePolicyTests(unittest.TestCase):
         self.assertTrue(any((ROOT / 'tests').glob('*.rs')))
 
 
+class BuildOwnershipTests(unittest.TestCase):
+    def test_hook_ownership_is_an_explicit_local_argument(self):
+        build = (ROOT / 'build.rs').read_text()
+        self.assertIn('install_from_build_script(env!("CARGO_MANIFEST_DIR"))', build)
+        config = ROOT / '.cargo/config.toml'
+        if config.exists():
+            self.assertNotIn('RHUSKY_REPOSITORY_ROOT', config.read_text())
+
+
 if __name__ == '__main__':
     unittest.main()
