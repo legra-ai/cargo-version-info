@@ -51,6 +51,12 @@ class MaintenancePolicyTests(unittest.TestCase):
 
 
 class BuildOwnershipTests(unittest.TestCase):
+    def test_hook_dependency_excludes_recursive_installers(self):
+        manifest = tomllib.loads((ROOT / 'Cargo.toml').read_text())
+        requirement = manifest['build-dependencies']['rhusky']
+        self.assertRegex(requirement, r'^2\.[0-9]+\.[0-9]+$')
+        self.assertGreaterEqual(tuple(map(int, requirement.split('.'))), (2, 0, 1))
+
     def test_hook_ownership_is_an_explicit_local_argument(self):
         build = (ROOT / 'build.rs').read_text()
         self.assertIn('install_from_build_script(env!("CARGO_MANIFEST_DIR"))', build)
