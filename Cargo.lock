@@ -355,9 +355,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-plugin-utils"
-version = "0.0.16"
+version = "0.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da171d14a1c96c01dc298b4fe07038c63624eac38b07cb027b6401787060776d"
+checksum = "24ed2604055faabccace8a395701dee06630335297c2ef1979b688892deeea22"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -366,7 +366,7 @@ dependencies = [
  "gix",
  "indicatif",
  "portable-pty",
- "rhusky 1.0.2",
+ "rhusky 2.0.1",
  "tokio",
 ]
 
@@ -3760,16 +3760,6 @@ name = "rhusky"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd58f5095f1eaaee85441008005db48773976f5bb85bedd35d6cf3f04db8ec4b"
-
-[[package]]
-name = "rhusky"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3214d6aa073af2bdfe58d4d487f1c525ea7b00cab0ceb4183e9fb5b87aec514"
-dependencies = [
- "async-fs-io",
- "tokio",
-]
 
 [[package]]
 name = "rhusky"
