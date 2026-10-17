@@ -733,8 +733,13 @@ fn create_commit(
     // Build extra headers for signature (if signing is enabled)
     let extra_headers = if signing_config.enabled {
         // Build the commit payload that will be signed
-        let payload =
-            signing::build_commit_payload(tree_id, parent_id, &author, &committer, &commit_message);
+        let payload = signing::build_commit_payload(
+            tree_id,
+            parent_id.detach(),
+            &author,
+            &committer,
+            &commit_message,
+        );
 
         // Sign the payload
         match signing::sign_commit_payload(&signing_config, &payload) {

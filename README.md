@@ -36,6 +36,12 @@ cargo install cargo-version-info
 
 ## Commands
 
+### Installed tool identity
+
+`cargo version-info --tool-version` reports the installed executable's package
+version and works outside a repository. `cargo version-info --version` computes
+the target project's build version; `current` reads its manifest version.
+
 ### `cargo version-info next`
 
 Calculate the next patch version from the latest GitHub release.
@@ -69,7 +75,7 @@ Get the current version from `Cargo.toml`.
 cargo version-info current
 
 # Specify custom manifest path
-cargo version-info current --manifest ./crates/my-crate/Cargo.toml
+cargo version-info current --manifest-path ./crates/my-crate/Cargo.toml
 
 # Output as JSON
 cargo version-info current --format json

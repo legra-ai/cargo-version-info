@@ -10,8 +10,6 @@
 //! Replaces scattered version logic in GitHub Actions, bash scripts, and Rust
 //! code.
 
-use std::path::PathBuf;
-
 use anyhow::Result;
 use async_fs_io::{
     metadata,
@@ -52,8 +50,8 @@ use clap::{
     arg_required_else_help = false
 )]
 struct CargoArgs {
-    /// Compute version for the current repo (same logic as build-version).
-    #[arg(long = "tool-version", short = 'T')]
+    /// Show the installed tool version without inspecting a repository.
+    #[arg(long = "tool-version", short = 'T', global = true)]
     tool_version_flag: bool,
 
     #[command(subcommand)]
@@ -80,10 +78,6 @@ struct VersionInfoCli {
 
     #[command(subcommand)]
     command: Option<VersionInfoCommand>,
-
-    /// Capture trailing args after `--` (e.g., `--version`).
-    #[arg(trailing_var_arg = true, hide = true)]
-    passthrough: Vec<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -178,21 +172,14 @@ async fn has_env_files() -> anyhow::Result<bool> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Load environment variables from .env* files using dotenvage
-    // This allows cargo-version-info to access encrypted secrets like GITHUB_TOKEN
-    // stored in .env.local files protected by dotenvage
-    // Only attempt to load if .env* files exist to avoid unnecessary warnings
-    if has_env_files().await?
-        && let Err(e) = dotenvage::EnvLoader::new().and_then(|loader| loader.load())
-    {
-        eprintln!("Warning: Failed to load/decrypt env files: {}", e);
-        eprintln!("Continuing with existing environment variables...");
+    let args = CargoArgs::parse();
+    if args.tool_version_flag {
+        println!("cargo-version-info {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
     }
 
-    let args = CargoArgs::parse();
-
-    if args.tool_version_flag {
-        return commands::build_version_for_repo(PathBuf::from(env!("CARGO_MANIFEST_DIR"))).await;
+    if has_env_files().await? {
+        dotenvage::EnvLoader::new()?.load()?;
     }
 
     if let Some(TopCommand::VersionInfo(cli)) = args.subcmd {
@@ -222,22 +209,6 @@ async fn main() -> Result<()> {
                 VersionInfoCommand::UpdateReadme(args) => commands::update_readme(args).await,
                 VersionInfoCommand::Version => commands::build_version_default().await,
             };
-        }
-
-        if cli
-            .passthrough
-            .iter()
-            .any(|arg| arg == "--version" || arg == "-V")
-        {
-            return commands::build_version_default().await;
-        }
-        if cli
-            .passthrough
-            .iter()
-            .any(|arg| arg == "--tool-version" || arg == "-T")
-        {
-            return commands::build_version_for_repo(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-                .await;
         }
 
         // No inner command: show help

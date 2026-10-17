@@ -1,20 +1,17 @@
-name: CI/CD
-
+name: CI
 on:
-  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
-
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * *'
 permissions:
-  contents: write
-
+  contents: read
 jobs:
   ci:
-    uses: legra-ai/github-actions/.github/workflows/cargo-crate-ci.yml@main
+    uses: legra-ai/github-actions/.github/workflows/cargo-maintenance.yml@2ff75bbc66cc08064a55b97dd693ef60f4d9b95d
     with:
       crate-name: cargo-version-info
       kind: binary
-      force-release: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit

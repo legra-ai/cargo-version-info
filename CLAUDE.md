@@ -74,13 +74,13 @@ cargo test -- --test-threads=1
 cargo test test_name -- --test-threads=1
 
 # Format check (requires nightly)
-cargo +nightly fmt --all -- --check
+sh scripts/fmt.sh --check
 
 # Format code
-cargo +nightly fmt --all
+sh scripts/fmt.sh
 
 # Clippy (requires nightly)
-cargo +nightly clippy --all-targets --all-features -- -D warnings -W missing-docs
+cargo clippy --locked --all-targets --all-features -- -D warnings -W missing-docs
 ```
 
 ## Code style
@@ -178,14 +178,13 @@ with CI's tag creation workflow.
 5. CI creates GitHub Release with changelog as release body
 6. CI publishes to crates.io and uploads platform binaries
 
-### Build version priority
+### Installed version
 
-Version is computed dynamically via `build.rs`:
-
-1. `BUILD_VERSION` env var (CI)
-2. `CARGO_PKG_VERSION_OVERRIDE` env var (legacy)
-3. Cargo.toml version + git SHA
-4. Fallback: `0.0.0-dev-<short-sha>`
+`cargo version-info --tool-version` reports the compiled package version
+without loading repository secrets or inspecting the build machine.
+Cargo's package metadata is authoritative. Use `build-version` to compute
+an explicit target repository's version. CI is the sole publisher; see
+`.github/PUBLISH.md`.
 
 ## Git workflow
 
@@ -207,7 +206,7 @@ to `.githooks/`. Installation is skipped in CI environments.
 The hooks enforce:
 
 - **pre-commit**: Runs `cargo +nightly fmt --check` and
-  `cargo +nightly clippy` on Rust files
+  `cargo clippy --locked` on Rust files
 - **commit-msg**: Verifies conventional commit format with mandatory
   scope using Cocogitto (`cog verify`)
 - **post-commit**: Verifies commit is signed
