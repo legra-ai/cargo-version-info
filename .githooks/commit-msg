@@ -19,10 +19,10 @@ if ! cog verify --file "$MSG_FILE" >/dev/null; then
   exit 1
 fi
 
-# Enforce: scope is mandatory, e.g. feat(api): ...
-# Accepts letters for type, and scope with [a-z0-9./-]
-if ! grep -E -q '^[a-z]+\([a-z0-9][a-z0-9./-]*\)!?\: ' "$MSG_FILE"; then
-  echo "Commit message must include a scope, e.g.: feat(backend): add endpoint" >&2
+# Validate the headline independently of body text.
+IFS= read -r headline < "$MSG_FILE" || { printf 'Cannot read commit headline\n' >&2; exit 1; }
+if ! printf '%s\n' "$headline" | grep -Eq '^(feat|fix|build|chore|docs|style|ci|refactor|perf|test|revert)\([a-z0-9][a-z0-9./-]*\)!?: [^[:space:]](.*[^[:space:]])?$'; then
+  echo "Required commit headline: type(scope): description (optional ! before colon)" >&2
   exit 1
 fi
 
