@@ -130,6 +130,12 @@ pub async fn update_cargo_toml_version(
         .parse::<DocumentMut>()
         .with_context(|| format!("Failed to parse TOML in {}", manifest_path.display()))?;
 
+    let explicit_package_version = doc
+        .get("package")
+        .and_then(|package| package.get("version"))
+        .and_then(|version| version.as_str())
+        .map(str::to_owned);
+
     // Track whether we updated each section
     let mut package_updated = false;
     let mut workspace_updated = false;
@@ -145,13 +151,19 @@ pub async fn update_cargo_toml_version(
         package_updated = true;
     }
 
-    // Update [workspace.package] version if present
+    // Inherited and coupled versions advance together. A different workspace
+    // version belongs to independently versioned members and must stay unchanged.
     if let Some(workspace_package) = doc
         .get_mut("workspace")
         .and_then(|w| w.as_table_mut())
         .and_then(|w| w.get_mut("package"))
         .and_then(|p| p.as_table_mut())
         && workspace_package.contains_key("version")
+        && (!package_updated
+            || workspace_package
+                .get("version")
+                .and_then(|version| version.as_str())
+                == explicit_package_version.as_deref())
     {
         workspace_package.insert("version", value(new_version));
         workspace_updated = true;
@@ -228,6 +240,37 @@ version = "1.0.0"
             .await
             .unwrap();
         assert!(content.contains("version = \"2.0.0\""));
+    }
+
+    #[tokio::test]
+    async fn test_preserves_independent_workspace_version() {
+        let (_dir, manifest_path) = create_temp_manifest(
+            r#"[package]
+name = "fixture"
+version = "0.2.0-alpha.19"
+
+[workspace.package]
+version = "0.7.0"
+"#,
+        )
+        .await;
+
+        update_cargo_toml_version(&manifest_path, "0.2.0-alpha.19", "0.2.0-alpha.20")
+            .await
+            .unwrap();
+
+        let content = async_fs_io::read_string_bounded(&manifest_path, 64 * 1024)
+            .await
+            .unwrap();
+        let document = content.parse::<DocumentMut>().unwrap();
+        assert_eq!(
+            document["package"]["version"].as_str(),
+            Some("0.2.0-alpha.20")
+        );
+        assert_eq!(
+            document["workspace"]["package"]["version"].as_str(),
+            Some("0.7.0")
+        );
     }
 
     #[tokio::test]
