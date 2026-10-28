@@ -18,7 +18,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_MERGER_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
-      - uses: legra-ai/github-actions/.github/actions/merge-tested-dependabot@12819667e09f7500e43c24eb3a6824b46591649f
+      - uses: legra-ai/github-actions/.github/actions/merge-tested-dependabot@fa33151dee2d92ee71027596452668491871f3c3
         with:
           token: ${{ steps.merger.outputs.token }}
           app-id: ${{ secrets.RELEASE_MERGER_APP_ID }}
