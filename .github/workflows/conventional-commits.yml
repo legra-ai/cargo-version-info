@@ -9,4 +9,4 @@ jobs:
     name: Conventional Commit
     runs-on: ubuntu-24.04
     steps:
-      - uses: legra-ai/github-actions/.github/actions/conventional-commit@12819667e09f7500e43c24eb3a6824b46591649f
+      - uses: legra-ai/github-actions/.github/actions/conventional-commit@fa33151dee2d92ee71027596452668491871f3c3
