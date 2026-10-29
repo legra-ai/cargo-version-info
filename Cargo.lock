@@ -366,7 +366,7 @@ dependencies = [
  "gix 0.89.0",
  "indicatif",
  "portable-pty",
- "rhusky 2.0.1",
+ "rhusky 2.0.2",
  "tokio",
 ]
 
@@ -389,7 +389,7 @@ dependencies = [
  "portable-pty",
  "regex",
  "reqwest",
- "rhusky 2.0.1",
+ "rhusky 2.0.2",
  "serde",
  "serde_json",
  "serial_test",
@@ -1775,7 +1775,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7518b930f6aeb75e871d32ce873c2ae46e35cef19b5a0b039d4337f651d897cd"
 dependencies = [
  "bstr",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -4026,9 +4026,9 @@ checksum = "bd58f5095f1eaaee85441008005db48773976f5bb85bedd35d6cf3f04db8ec4b"
 
 [[package]]
 name = "rhusky"
-version = "2.0.1"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9548a7a5c007925ce1965a8a0bbecb34430ab255154c050c7275aedd19788c79"
+checksum = "569164e03f099594e9a40da83e9095d9f88b2a33bc8ce597c4b7015591286194"
 dependencies = [
  "async-fs-io",
  "tokio",
