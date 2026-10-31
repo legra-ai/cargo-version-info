@@ -59,6 +59,17 @@ class MaintenancePolicyTests(unittest.TestCase):
         self.assertIn('merge-tested-dependabot@', merge)
         self.assertIn('actions/create-github-app-token@', merge)
 
+    def test_shared_actions_update_as_one_version_group(self):
+        config = (ROOT / '.github/dependabot.yml').read_text()
+        actions = config.split('package-ecosystem: github-actions', 1)[1]
+        group = actions.split('      shared-policy-actions:', 1)[1].split('      compatible-updates:', 1)[0]
+        self.assertIn('applies-to: version-updates', group)
+        self.assertIn('patterns: ["legra-ai/github-actions*"]', group)
+        self.assertNotIn('update-types:', group)
+        compatible = actions.split('      compatible-updates:', 1)[1].split('      security-updates:', 1)[0]
+        self.assertIn('exclude-patterns: ["legra-ai/github-actions*"]', compatible)
+        self.assertIn('applies-to: security-updates', actions)
+
     def test_compiler_and_formatter_pins_match_hooks(self):
         package = tomllib.loads((ROOT / 'Cargo.toml').read_text())['package']
         compiler = tomllib.loads((ROOT / 'rust-toolchain.toml').read_text())['toolchain']['channel']
