@@ -190,9 +190,9 @@ dependencies = [
 
 [[package]]
 name = "async-fs-io"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6ce680f375cdb1379a8956e532db06ccca7d458fb7e9c86b7c2c0a5df514bc7"
+checksum = "1d2e5792ff14a3bd92125c08a3d61143a6851105961eca08b420b69cd298a001"
 dependencies = [
  "fs2",
  "thiserror 2.0.21",
@@ -366,13 +366,13 @@ dependencies = [
  "gix",
  "indicatif",
  "portable-pty",
- "rhusky 2.0.3",
+ "rhusky 2.0.4",
  "tokio",
 ]
 
 [[package]]
 name = "cargo-version-info"
-version = "1.0.13"
+version = "1.0.14"
 dependencies = [
  "anyhow",
  "async-fs-io",
@@ -389,7 +389,7 @@ dependencies = [
  "portable-pty",
  "regex",
  "reqwest",
- "rhusky 2.0.3",
+ "rhusky 2.0.4",
  "serde",
  "serde_json",
  "serial_test",
@@ -428,9 +428,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.10.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86e055fa6e3e40ad6187ba25b6855eeb635d5271f8e0f0e1e9a5826b8d75bea0"
+checksum = "4ff2a8126fff0f8c839080d619675a585e61720bb12d2baceae45769fd66f155"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -675,9 +675,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ba106e844045ddc02c20768ac4b0b7cb45f2cc2ecbd833ac9f5dacb183c2055"
+checksum = "5f97d3416d5337d15c4b0d78c8c91df922ca143f57ec20e2d1c188333047ef04"
 dependencies = [
  "cfg-if",
 ]
@@ -1750,9 +1750,9 @@ dependencies = [
 
 [[package]]
 name = "gix-macros"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f11f5429ca73cc3758c9f53af56a9fba100a8701c5b4bc30e29b8b0b15288991"
+checksum = "d02e51a52e15255757c06a6873529ae01205711aa9e8f9a1d46b556f1a14a96e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2758,9 +2758,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.38"
+version = "0.2.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2b005715dcbeb0089a3c0dab99f2ff1cc3b2525323552703d648585d342a383"
+checksum = "3ac703058abac89e5c39b0b879dce2b6b14a4ba36600c7e7e3d0c60a6883ef3c"
 dependencies = [
  "defmt 1.2.0",
  "jiff-core",
@@ -2775,9 +2775,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e52fe76043ccecc9005d2305ebaadf7d7fc0cc89ca6baa10a94d6bc68c7128c"
+checksum = "aee43309eb53bafb8c36d35d6e444769c8f8e6206a9fbf7546f5db9d7d4a0e93"
 dependencies = [
  "defmt 1.2.0",
  "log",
@@ -2785,9 +2785,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.38"
+version = "0.2.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cc9817253cf7c7ee4684451bd327e88d6f3658014e54a29198625590650695c"
+checksum = "6dc32470c67eb7d0e9ccb74303fa925313dc04cecb1aa048beaa6f391e36a93d"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -3762,9 +3762,9 @@ checksum = "bd58f5095f1eaaee85441008005db48773976f5bb85bedd35d6cf3f04db8ec4b"
 
 [[package]]
 name = "rhusky"
-version = "2.0.3"
+version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55d5567ed9d191f2254a7ce32832b02e0fe617a295369a768da4085fb2569dec"
+checksum = "d1ee25e0e4f157fd2a6e25674bf9665d2e5c9f9911de17a2a5a8697d1b074f99"
 dependencies = [
  "async-fs-io",
  "tokio",
