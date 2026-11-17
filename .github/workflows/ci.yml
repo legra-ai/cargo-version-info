@@ -8,6 +8,7 @@ on:
     - cron: '23 4 * * *'
 permissions:
   contents: read
+  actions: read
 jobs:
   prepare:
     runs-on: ubuntu-24.04
@@ -16,8 +17,9 @@ jobs:
       - run: python3 -m unittest discover -s scripts -p 'test_*.py'
   ci:
     needs: prepare
-    uses: legra-ai/github-actions/.github/workflows/cargo-maintenance.yml@4f513e763cf79e620f670ceb4430fd8adfd06c7e
+    uses: legra-ai/github-actions/.github/workflows/cargo-maintenance.yml@8cdaad621c581c2f59e5eb0dfafc05f635c12c0a
     with:
+      breaking-change-bump: minor
       crate-name: cargo-version-info
       kind: binary
     secrets: inherit

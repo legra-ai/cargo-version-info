@@ -42,6 +42,8 @@ class MaintenancePolicyTests(unittest.TestCase):
     def test_one_pinned_release_pipeline(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertRegex(workflow, r'cargo-maintenance.yml@[0-9a-f]{40}')
+        # The shared release-approval job verifies the owner's review.
+        self.assertIn('\npermissions:\n  contents: read\n  actions: read\n', workflow)
         self.assertNotIn('policy-revision:', workflow)
         self.assertIn('schedule:', workflow)
         self.assertIn('workflow_dispatch:', workflow)
