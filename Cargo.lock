@@ -372,7 +372,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-version-info"
-version = "1.0.33"
+version = "1.0.34"
 dependencies = [
  "anyhow",
  "async-fs-io",
